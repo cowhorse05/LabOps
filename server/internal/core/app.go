@@ -161,8 +161,11 @@ func (a *App) withRateLimit(next http.Handler) http.Handler {
 			rl = newRateLimiter(60, time.Second)
 			a.rateLimiters[ip] = rl
 		}
+		// Hold rlMu through allow() to prevent data races on the rateLimiter fields
+		// when concurrent requests arrive from the same IP.
+		ok := rl.allow()
 		a.rlMu.Unlock()
-		if !rl.allow() {
+		if !ok {
 			writeError(w, http.StatusTooManyRequests, "rate limit exceeded")
 			return
 		}

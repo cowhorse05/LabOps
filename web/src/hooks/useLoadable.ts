@@ -77,11 +77,18 @@ export function useLoadableAll<T extends unknown[]>(
   const onErrorRef = useRef(options.onError);
   onErrorRef.current = options.onError;
 
+  // Store fetchers in a ref so load() has stable identity across renders.
+  // DashboardPage passes an inline array literal, which would otherwise cause
+  // the useCallback to recreate load() on every render, triggering an infinite
+  // effect cleanup/setup loop.
+  const fetchersRef = useRef(fetchers);
+  fetchersRef.current = fetchers;
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const results = await Promise.all(
-        fetchers.map((f) =>
+        fetchersRef.current.map((f) =>
           f().catch((err) => {
             console.error('useLoadableAll partial failure:', err);
             const error = err instanceof Error ? err : new Error(String(err));
@@ -94,7 +101,7 @@ export function useLoadableAll<T extends unknown[]>(
     } finally {
       setLoading(false);
     }
-  }, [fetchers]);
+  }, []); // stable — uses ref for fetchers
 
   useEffect(() => {
     load();

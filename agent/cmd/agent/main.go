@@ -141,9 +141,29 @@ func run(cfg config) error {
 	}
 	go heartbeatLoop(ctx, send, cancel, cfg.MockProfile)
 
+	// Periodically reset the read deadline so a cancelled context (from a failed
+	// heartbeat) causes ReadJSON to return an error rather than blocking forever.
+	go func() {
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+			}
+		}
+	}()
+
 	for {
 		var msg incomingEnvelope
 		if err := conn.ReadJSON(&msg); err != nil {
+			// If the read was interrupted by context cancellation, surface that instead
+			// of the opaque websocket error.
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			return err
 		}
 		switch msg.Type {
@@ -198,6 +218,14 @@ func executeAndReport(send func(any) error, command commandPayload) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("panic recovered in executeAndReport: %v", r)
+			// Send a failure result so the task doesn't stay "running" forever
+			// waiting for the server-side 2-minute timeout.
+			_ = send(envelope{Type: "task_result", Payload: taskResultPayload{
+				TaskID:   command.TaskID,
+				Status:   "failed",
+				Stderr:   fmt.Sprintf("agent panic: %v", r),
+				ExitCode: 1,
+			}})
 		}
 	}()
 	start := time.Now()

@@ -186,22 +186,19 @@ func (a *App) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 			tasks = append(tasks, task)
 		}
 	}
+	// Unified response shape: always returns { tasks, errors? } so the frontend
+	// sees a consistent structure regardless of success/failure count.
+	status := http.StatusCreated
 	if len(tasks) == 0 && len(errs) > 0 {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":  "all tasks failed",
-			"errors": errs,
-		})
-		return
+		status = http.StatusInternalServerError
+	} else if len(errs) > 0 {
+		status = http.StatusOK
 	}
-	resp := createTaskResponse{Tasks: tasks}
+	resp := map[string]any{"tasks": tasks}
 	if len(errs) > 0 {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"tasks":  tasks,
-			"errors": errs,
-		})
-		return
+		resp["errors"] = errs
 	}
-	writeJSON(w, http.StatusCreated, resp)
+	writeJSON(w, status, resp)
 }
 
 func (a *App) handleAuditLogs(w http.ResponseWriter, r *http.Request) {
