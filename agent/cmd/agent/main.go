@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"math/rand"
@@ -213,6 +214,11 @@ func executeAndReport(send func(any) error, command commandPayload) {
 	}
 }
 
+const (
+	maxStdoutSize = 256 * 1024 // 256KB
+	maxStderrSize = 64 * 1024  // 64KB
+)
+
 func executeCommand(command string) (string, string, int) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -226,16 +232,33 @@ func executeCommand(command string) (string, string, int) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err := cmd.Run()
+
+	stdoutStr := truncateOutput(&stdout, maxStdoutSize)
+	stderrStr := truncateOutput(&stderr, maxStderrSize)
+
 	if ctx.Err() == context.DeadlineExceeded {
-		return stdout.String(), "command timed out after 30s", 124
+		return stdoutStr, "command timed out after 30s", 124
 	}
 	if err == nil {
-		return stdout.String(), stderr.String(), 0
+		return stdoutStr, stderrStr, 0
 	}
 	if exitErr, ok := err.(*exec.ExitError); ok {
-		return stdout.String(), stderr.String(), exitErr.ExitCode()
+		return stdoutStr, stderrStr, exitErr.ExitCode()
 	}
-	return stdout.String(), err.Error(), 1
+	return stdoutStr, err.Error(), 1
+}
+
+func truncateOutput(buf *bytes.Buffer, limit int64) string {
+	limited := io.LimitReader(buf, limit)
+	out, err := io.ReadAll(limited)
+	if err != nil {
+		return ""
+	}
+	result := string(out)
+	if buf.Len() > 0 {
+		result += "...[truncated]"
+	}
+	return result
 }
 
 func buildRegister(cfg config) registerPayload {

@@ -22,7 +22,10 @@ export default function DeviceDetailPage() {
     return { device: nextDevice, tasks: allTasks.filter((task) => task.deviceId === id) };
   }, [id]);
 
-  const { data, loading, reload } = useLoadable(fetchData, { intervalMs: 3000 });
+  const { data, loading, reload } = useLoadable(fetchData, {
+    intervalMs: 3000,
+    onError: () => message.error('加载设备详情失败'),
+  });
   const device = data?.device ?? null;
   const tasks = data?.tasks ?? [];
 

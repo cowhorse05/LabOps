@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -102,27 +103,48 @@ func (a *App) handleAgentWS(w http.ResponseWriter, r *http.Request) {
 		case "heartbeat":
 			var hb HeartbeatPayload
 			if err := json.Unmarshal(msg.Payload, &hb); err == nil {
-				_ = a.store.UpdateHeartbeat(context.Background(), device.ID, hb)
+				if err := a.store.UpdateHeartbeat(context.Background(), device.ID, hb); err != nil {
+					log.Printf("failed to update heartbeat for device %s: %v", device.ID, err)
+				}
 			}
 		case "task_result":
 			var result TaskResultPayload
-			if err := json.Unmarshal(msg.Payload, &result); err == nil {
-				_ = a.store.CompleteTask(context.Background(), result)
-				status := result.Status
-				if status == "" {
-					status = StatusSuccess
-					if result.ExitCode != 0 {
-						status = StatusFailed
-					}
+			if err := json.Unmarshal(msg.Payload, &result); err != nil {
+				log.Printf("failed to unmarshal task_result: %v", err)
+				break
+			}
+			task, found, err := a.store.GetTask(context.Background(), result.TaskID)
+			if err != nil {
+				log.Printf("failed to get task %s: %v", result.TaskID, err)
+				break
+			}
+			if !found {
+				log.Printf("task %s not found", result.TaskID)
+				break
+			}
+			if task.DeviceID != device.ID {
+				log.Printf("task %s does not belong to device %s (expected %s)", result.TaskID, device.ID, task.DeviceID)
+				break
+			}
+			if err := a.store.CompleteTask(context.Background(), result); err != nil {
+				log.Printf("failed to complete task %s: %v", result.TaskID, err)
+			}
+			status := result.Status
+			if status == "" {
+				status = StatusSuccess
+				if result.ExitCode != 0 {
+					status = StatusFailed
 				}
-				_ = a.store.CreateAudit(context.Background(), AuditLog{
-					Actor:    "agent",
-					Action:   "command.complete",
-					DeviceID: device.ID,
-					TaskID:   result.TaskID,
-					Status:   status,
-					Message:  fmt.Sprintf("exit_code=%d duration_ms=%d", result.ExitCode, result.DurationMS),
-				})
+			}
+			if err := a.store.CreateAudit(context.Background(), AuditLog{
+				Actor:    "agent",
+				Action:   "command.complete",
+				DeviceID: device.ID,
+				TaskID:   result.TaskID,
+				Status:   status,
+				Message:  fmt.Sprintf("exit_code=%d duration_ms=%d", result.ExitCode, result.DurationMS),
+			}); err != nil {
+				log.Printf("failed to create audit for task %s: %v", result.TaskID, err)
 			}
 		}
 	}

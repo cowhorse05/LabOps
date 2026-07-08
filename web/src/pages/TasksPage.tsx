@@ -17,7 +17,10 @@ export default function TasksPage() {
     return { groups: nextGroups, tasks: nextTasks };
   }, []);
 
-  const { data, loading, reload } = useLoadable(fetcher, { intervalMs: 3000 });
+  const { data, loading, reload } = useLoadable(fetcher, {
+    intervalMs: 3000,
+    onError: () => message.error('加载任务数据失败'),
+  });
   const groups = data?.groups ?? [];
   const tasks = data?.tasks ?? [];
 
@@ -34,6 +37,8 @@ export default function TasksPage() {
       message.success(`已创建 ${result.tasks.length} 个任务`);
       form.setFieldsValue({ command: values.command });
       await reload();
+    } catch {
+      message.error('创建任务失败');
     } finally {
       setSubmitting(false);
     }
