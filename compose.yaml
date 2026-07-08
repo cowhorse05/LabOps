@@ -1,0 +1,88 @@
+services:
+  server:
+    build:
+      context: ./server
+    environment:
+      LABOPS_ADDR: ":8080"
+      LABOPS_DB_PATH: /data/labops.db
+      LABOPS_AGENT_TOKEN: dev-agent-token
+      LABOPS_WEB_TOKEN: dev-token
+    ports:
+      - "8080:8080"
+    volumes:
+      - labops-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  web:
+    build:
+      context: ./web
+    environment:
+      VITE_PROXY_TARGET: http://server:8080
+    ports:
+      - "5173:5173"
+    depends_on:
+      server:
+        condition: service_healthy
+
+  agent-lab-pc-01:
+    build:
+      context: ./agent
+    command:
+      - --server=http://server:8080
+      - --token=dev-agent-token
+      - --id=agent-lab-pc-01
+      - --name=lab-pc-01
+      - --group=classroom-a
+      - --mock-profile=windows-lab
+    depends_on:
+      server:
+        condition: service_healthy
+
+  agent-lab-pc-02:
+    build:
+      context: ./agent
+    command:
+      - --server=http://server:8080
+      - --token=dev-agent-token
+      - --id=agent-lab-pc-02
+      - --name=lab-pc-02
+      - --group=classroom-a
+      - --mock-profile=ubuntu
+    depends_on:
+      server:
+        condition: service_healthy
+
+  agent-server-01:
+    build:
+      context: ./agent
+    command:
+      - --server=http://server:8080
+      - --token=dev-agent-token
+      - --id=agent-server-01
+      - --name=ubuntu-server-01
+      - --group=homelab
+      - --mock-profile=server
+    depends_on:
+      server:
+        condition: service_healthy
+
+  agent-edge-01:
+    build:
+      context: ./agent
+    command:
+      - --server=http://server:8080
+      - --token=dev-agent-token
+      - --id=agent-edge-01
+      - --name=edge-node-01
+      - --group=edge
+      - --mock-profile=edge-node
+    depends_on:
+      server:
+        condition: service_healthy
+
+volumes:
+  labops-data:

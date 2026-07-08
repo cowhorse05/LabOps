@@ -1,0 +1,99 @@
+import { useEffect } from 'react';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Avatar, Button, Layout, Menu, Space, Tag, Typography, App } from 'antd';
+import {
+  AuditOutlined,
+  ClusterOutlined,
+  DashboardOutlined,
+  DesktopOutlined,
+  LogoutOutlined,
+  ProfileOutlined,
+  ReloadOutlined,
+} from '@ant-design/icons';
+import { authApi } from '@/api/labops';
+import { useAuthStore } from '@/stores/auth';
+
+const { Header, Sider, Content } = Layout;
+
+const navItems = [
+  { key: '/dashboard', icon: <DashboardOutlined />, label: '仪表盘' },
+  { key: '/devices', icon: <DesktopOutlined />, label: '设备' },
+  { key: '/groups', icon: <ClusterOutlined />, label: '分组' },
+  { key: '/tasks', icon: <ProfileOutlined />, label: '任务' },
+  { key: '/audit', icon: <AuditOutlined />, label: '审计' },
+];
+
+export default function AppLayout() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { message } = App.useApp();
+  const user = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
+  const clear = useAuthStore((s) => s.clear);
+
+  useEffect(() => {
+    authApi
+      .me()
+      .then(setUser)
+      .catch(() => {
+        message.warning('登录状态已失效');
+        clear();
+        navigate('/login', { replace: true });
+      });
+  }, [clear, message, navigate, setUser]);
+
+  const activeKey = navItems.find((item) => location.pathname.startsWith(item.key))?.key || '/dashboard';
+
+  return (
+    <Layout className="shell">
+      <Sider width={232} className="shell-sider">
+        <div className="brand" onClick={() => navigate('/dashboard')}>
+          <div className="brand-mark">L</div>
+          <div>
+            <div className="brand-name">LabOps</div>
+            <div className="brand-sub">Open lab operations</div>
+          </div>
+        </div>
+        <Menu
+          mode="inline"
+          selectedKeys={[activeKey]}
+          items={navItems}
+          onClick={(item) => navigate(item.key)}
+          className="shell-menu"
+        />
+      </Sider>
+      <Layout>
+        <Header className="shell-header">
+          <div>
+            <Typography.Text className="muted">当前环境</Typography.Text>
+            <Space size={8} style={{ marginLeft: 10 }}>
+              <Tag color="blue">Windows + Docker</Tag>
+              <Tag color="green">MVP</Tag>
+            </Space>
+          </div>
+          <Space size={14}>
+            <Button icon={<ReloadOutlined />} onClick={() => window.location.reload()}>
+              刷新
+            </Button>
+            <Space size={10} className="user-chip">
+              <Avatar size={30}>{user?.displayName?.[0] || 'A'}</Avatar>
+              <span>{user?.displayName || 'LabOps Admin'}</span>
+            </Space>
+            <Button
+              icon={<LogoutOutlined />}
+              onClick={() => {
+                clear();
+                navigate('/login', { replace: true });
+              }}
+            >
+              退出
+            </Button>
+          </Space>
+        </Header>
+        <Content className="shell-content">
+          <Outlet />
+        </Content>
+      </Layout>
+    </Layout>
+  );
+}
