@@ -1,5 +1,47 @@
 # LabOps 变更日志
 
+## 2026-07-08 Round 5 — P0 安全加固 + HTTP handler 测试
+
+### 审查
+
+定向审查发现 3 P0 + 3 P1 + 6 P2，焦点：
+- 命令输出无限制 → agent OOM + DB 膨胀
+- task_result 无设备归属校验 → 安全漏洞
+- 批量任务部分失败无回滚 → 悬空任务
+- WebSocket 错误静默丢弃 → 状态不一致
+
+### 修复
+
+**P0:**
+- [x] agent: 命令输出大小限制 (stdout 256KB, stderr 64KB), io.LimitReader
+- [x] server: task_result 设备归属校验 (GetTask + DeviceID 比对)
+- [ ] ~~批量任务回滚~~ — deferred (需事务机制)
+
+**P1:**
+- [x] server: WebSocket 错误日志 (UpdateHeartbeat/CompleteTask/CreateAudit)
+- [x] web: DeviceDetailPage/TasksPage onError 接入
+- [x] web: TasksPage submit catch 块
+
+**测试:**
+- [x] api_test.go: 新增 15 个 HTTP handler 测试 (511 行)
+  - handleHealth, handleLogin(valid/invalid), handleMe
+  - handleStats, handleDevices(empty/withData), handleGetDevice(notFound)
+  - handleGroups, handleCreateTask(4 cases), handleTasks, handleAudit
+
+### 验证
+
+- [x] `npm run build` — **通过**
+- [x] `api_test.go` 语法检查 — **通过** (go vet)
+- [x] git commit — **通过** (dbd1aed, 6 files, +589 -23)
+- [ ] git push — 网络不可用 (不重试，1 pending commit)
+- [ ] `go test ./...` — **待环境**
+
+### 自检
+
+- **没想到**: HTTP test agent 仍运行但文件已写入并被 R5 commit 包含——时间窗口恰好在 agent 写文件和 commit 之间
+- **疏漏**: P0-2 (批量任务回滚) 未修复——需事务支持，复杂度超本轮范围
+- **改进**: 下轮处理 P2 项 (maintenance timeout, Vary header, CORS Origin 白名单)
+
 ## 2026-07-08 Round 4 — 测试补充 + onError + 类型修复
 
 ### 变更
