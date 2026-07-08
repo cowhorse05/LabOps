@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
 	"math/rand"
 	"net/url"
 	"os"
@@ -76,11 +77,19 @@ type taskResultPayload struct {
 
 func main() {
 	cfg := parseFlags()
+	backoff := 1 * time.Second
+	const maxBackoff = 60 * time.Second
 	for {
 		if err := run(cfg); err != nil {
 			log.Printf("agent disconnected: %v", err)
+			time.Sleep(backoff)
+			backoff *= 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
+		} else {
+			backoff = 1 * time.Second
 		}
-		time.Sleep(3 * time.Second)
 	}
 }
 
@@ -180,6 +189,11 @@ func heartbeatLoop(ctx context.Context, send func(any) error, cancel context.Can
 }
 
 func executeAndReport(send func(any) error, command commandPayload) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("panic recovered in executeAndReport: %v", r)
+		}
+	}()
 	start := time.Now()
 	stdout, stderr, exitCode := executeCommand(command.Command)
 	status := "success"
@@ -287,7 +301,7 @@ func jitter(base float64) float64 {
 	if value > 99 {
 		return 99
 	}
-	return float64(int(value*10)) / 10
+	return math.Round(value*10) / 10
 }
 
 func agentWSURL(serverURL, token string) (string, error) {

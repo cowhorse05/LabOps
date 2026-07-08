@@ -10,6 +10,8 @@ export function statusColor(status: string) {
     case 'failed':
     case 'timeout':
       return 'red';
+    case 'offline':
+      return 'default';
     default:
       return 'default';
   }

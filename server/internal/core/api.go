@@ -174,7 +174,11 @@ func (a *App) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		fresh, ok, _ := a.store.GetTask(r.Context(), task.ID)
+		fresh, ok, err := a.store.GetTask(r.Context(), task.ID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 		if ok {
 			tasks = append(tasks, fresh)
 		} else {

@@ -1,37 +1,21 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Button, Card, Input, Progress, Space, Table, Tag, Typography } from 'antd';
 import { EyeOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { labopsApi } from '@/api/labops';
-import type { Device } from '@/types';
+import { useLoadable } from '@/hooks/useLoadable';
 import { statusColor, statusText } from '@/utils/status';
 
 export default function DevicesPage() {
   const navigate = useNavigate();
-  const [devices, setDevices] = useState<Device[]>([]);
-  const [loading, setLoading] = useState(false);
   const [keyword, setKeyword] = useState('');
-
-  async function load() {
-    setLoading(true);
-    try {
-      setDevices(await labopsApi.devices());
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    load();
-    const timer = window.setInterval(load, 10000);
-    return () => window.clearInterval(timer);
-  }, []);
+  const { data: devices, loading, reload } = useLoadable(() => labopsApi.devices(), { intervalMs: 10000 });
 
   const filtered = useMemo(() => {
     const k = keyword.trim().toLowerCase();
-    if (!k) return devices;
-    return devices.filter((d) => [d.name, d.groupName, d.os, d.ip, d.hostname].some((v) => v.toLowerCase().includes(k)));
+    if (!k) return devices ?? [];
+    return (devices ?? []).filter((d) => [d.name, d.groupName, d.os, d.ip, d.hostname].some((v) => v.toLowerCase().includes(k)));
   }, [devices, keyword]);
 
   return (
@@ -50,7 +34,7 @@ export default function DevicesPage() {
             onChange={(e) => setKeyword(e.target.value)}
             style={{ width: 280 }}
           />
-          <Button icon={<ReloadOutlined />} onClick={load}>
+          <Button icon={<ReloadOutlined />} onClick={reload}>
             刷新
           </Button>
         </Space>

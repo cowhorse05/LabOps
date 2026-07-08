@@ -9,6 +9,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /out/labops-agent ./cmd/agent
 FROM alpine:3.20
 
 RUN addgroup -S labops && adduser -S labops -G labops
+RUN apk add --no-cache ca-certificates
 WORKDIR /app
 COPY --from=build /out/labops-agent /app/labops-agent
 USER labops

@@ -18,4 +18,6 @@ EXPOSE 8080
 ENV LABOPS_ADDR=:8080
 ENV LABOPS_DB_PATH=/data/labops.db
 
+HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://localhost:8080/api/health
+
 ENTRYPOINT ["/app/labops-server"]

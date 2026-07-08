@@ -1,25 +1,10 @@
-import { useEffect, useState } from 'react';
 import { Button, Card, Progress, Table, Typography } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import { labopsApi } from '@/api/labops';
-import type { DeviceGroup } from '@/types';
+import { useLoadable } from '@/hooks/useLoadable';
 
 export default function GroupsPage() {
-  const [groups, setGroups] = useState<DeviceGroup[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  async function load() {
-    setLoading(true);
-    try {
-      setGroups(await labopsApi.groups());
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    load();
-  }, []);
+  const { data: groups, loading, reload } = useLoadable(() => labopsApi.groups(), { intervalMs: 10000 });
 
   return (
     <div className="page">
@@ -28,7 +13,7 @@ export default function GroupsPage() {
           <Typography.Title level={2}>分组</Typography.Title>
           <Typography.Text className="muted">设备组来自 Agent 注册信息，可用于批量命令。</Typography.Text>
         </div>
-        <Button icon={<ReloadOutlined />} onClick={load}>
+        <Button icon={<ReloadOutlined />} onClick={reload}>
           刷新
         </Button>
       </div>
@@ -36,7 +21,7 @@ export default function GroupsPage() {
         <Table
           rowKey="name"
           loading={loading}
-          dataSource={groups}
+          dataSource={groups ?? []}
           columns={[
             { title: '分组', dataIndex: 'name' },
             { title: '设备数', dataIndex: 'total' },

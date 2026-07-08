@@ -1,5 +1,58 @@
 # LabOps 变更日志
 
+## 2026-07-08 Round 2 — useLoadable 重构 + 剩余 P1 修复
+
+### 审查范围
+
+基于 Round 1 的 80+ 问题审计结果，本轮聚焦 deferred 的 P1 项，不再做全量审查。
+
+### 本轮修复清单
+
+#### Web 重构 (useLoadable hook 应用)
+- [x] **GroupsPage.tsx** — 手动 loading 模式 → `useLoadable(() => labopsApi.groups(), { intervalMs: 10000 })`，新增 10s 自动刷新
+- [x] **AuditPage.tsx** — 同上 → `useLoadable(..., { intervalMs: 15000 })`，新增 15s 自动刷新
+- [x] **DevicesPage.tsx** — 手动 setInterval → `useLoadable(..., { intervalMs: 10000 })`，消除 useEffect 样板
+- [x] **status.ts** — 添加显式 `case 'offline': return 'default'`，提高代码自文档性
+
+#### Agent (Go)
+- [x] **main.go:78-93** — 重连固定 3s → 指数退避 (1s → 2s → 4s → ... → max 60s)，成功连接后重置
+- [x] **main.go:191-196** — `executeAndReport` 新增 `defer recover()` 防止 panic 导致 agent 进程崩溃
+- [x] **main.go:304** — `jitter()` 截断 → `math.Round()` 四舍五入
+
+#### Server (Go)
+- [x] **store.go:498** — `newID` fallback 时间戳 → `time.Now().UnixNano()`，消除秒级碰撞风险
+- [x] **api.go:177-181** — `handleCreateTask` 中 `GetTask` 错误不再被忽略
+
+#### 基础设施
+- [x] **agent/Dockerfile:12** — 添加 `ca-certificates` 包，为未来 TLS/WSS 支持做准备
+- [x] **server/Dockerfile:21** — 内建 `HEALTHCHECK` 指令，不依赖 compose.yaml
+
+### 验证结果
+
+- [x] `npm run build` (tsc + vite build) — **通过**
+- [ ] `go test ./...` — **待环境**（同 Round 1 阻塞原因）
+- [ ] Docker Compose 集成测试 — **待环境**
+
+### 自检
+
+**有什么没想到的？**
+- `useLoadable` 返回值是 T|null，页面需要 `?? [] ` 守卫。GroupsPage/AuditPage/DevicesPage 已加上，但 DashboardPage 和 TasksPage 还没迁移。
+- Agent 心跳修复引入 `cancel` 参数传递在 Round 1 就做了，Round 2 的 `run()` 返回 nil 时重置 backoff 依赖心跳错误触发 cancel——心跳失败 → cancel → run 返回 nil → backoff 重置。逻辑链中如果未来新增 ctx cancel 的其他触发源，可能意外重置 backoff。
+
+**有什么疏漏？**
+- DashboardPage 还没迁移到 `useLoadable`，仍用手动 `useState` x5 + `Promise.allSettled`
+- DevicesPage 的搜索功能保留了手动 `useState` + `useMemo`，与 `useLoadable` 兼容良好
+- `useLoadable` hook 里 console.error 还不够——没有用户可见的错误提示
+
+**如何改进？**
+- 下一轮（如需要）：迁移 DashboardPage 到 `useLoadableAll`，补 DeviceDetailPage + TasksPage
+- 为 `useLoadable` 添加可选的 `onError` 回调，让页面可以展示错误 Toast
+
+**Todolist 更新**：
+- [x] Round 1 deferred: useLoadable 重构、auto-refresh、panic recover、backoff、newID、GetTask error、Dockerfile
+- [ ] 待下一轮: DashboardPage 迁移、DeviceDetailPage 迁移、TasksPage 迁移
+- [ ] 待环境: Go test、Docker Compose 集成验证
+
 ## 2026-07-08 Round 1 — 代码审计 + P0 修复
 
 ### 审查范围
@@ -54,19 +107,3 @@
 | P1 | Server | 维护循环静默吞错误 | 需添加日志依赖 |
 | P1 | Agent | 命令输出无大小限制 | 内存限制保护，待下一轮 |
 | P2 | Agent | 重连无指数退避 | 待下一轮 |
-
-### 自检
-
-**有什么没想到的？**
-- 没考虑到 `useLoadableAll` hook 的 `fetchers` 数组类型推导在 TS 中的复杂度。当前实现使用 `Promise.all` + 每个单独 catch，但 TypeScript 类型推导可能不够精确。
-- 没给 `ErrorBoundary` 加 `componentDidCatch` 的错误上报机制（如 Sentry）。
-
-**有什么疏漏？**
-- 审查报告指出 `newID` 的 fallback 路径存在 ID 碰撞风险，本轮未修复。需要在下一轮处理。
-- Agent `executeAndReport` 中的 goroutine panic 无 recover，仍未处理。
-
-**如何改进？**
-- 下一轮应优先：
-  1. 为 server 和 agent 补充核心路径单元测试
-  2. 引入 `useLoadable` hook 重构所有页面，消除重复的 loading 模板
-  3. 为 GroupsPage 和 AuditPage 添加自动刷新

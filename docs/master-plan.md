@@ -216,25 +216,26 @@ Status 常量：`online/offline` (设备), `pending/running/success/failed/timeo
   - [x] `App` 层路由注册、CORS、token 鉴权、维护循环
   - [x] `API` 层 10 个 REST handler
   - [x] `Agent` 层 WebSocket handler (register/heartbeat/command/task_result)
+  - [x] **Round 1 fix**: UpsertDevice ON CONFLICT 补充 cpu/memory/disk_usage 列
 - [x] Go Agent：支持 `--name`、`--group`、`--mock-profile`，主动连接 Server
   - [x] 注册协议 + 心跳循环 + 命令执行
   - [x] 4 种 mock profile (ubuntu/windows/server/edge)
   - [x] 自动重连 (3s 间隔)
   - [x] 单元测试：wsURL, register, executeCommand
+  - [x] **Round 1 fix**: 心跳失败触发立即重连、空命令校验、error/unknown 消息处理
 - [x] Web：设备列表、设备详情、命令执行、任务结果、审计页
-  - [x] LoginPage (admin/admin)
-  - [x] DashboardPage (stats + 设备表格 + 在线率 + 最近任务/审计)
+  - [x] LoginPage (admin/admin) — **Round 1 fix**: 区分 401/5xx/网络错误
+  - [x] DashboardPage (stats + 设备表格 + 在线率 + 最近任务/审计) — **Round 1 fix**: Promise.all → allSettled
   - [x] DevicesPage (搜索 + 自动刷新 10s)
   - [x] DeviceDetailPage (资产信息 + 实时指标 + 命令执行 + 最近任务)
   - [x] GroupsPage (分组列表 + 在线率)
-  - [x] TasksPage (批量命令表单 + 任务表格 + stdout/stderr 展开)
+  - [x] TasksPage (批量命令表单 + 任务表格 + stdout/stderr 展开) — **Round 1 fix**: initialValues 异步修复
   - [x] AuditPage (审计日志表格)
   - [x] Zustand auth store + axios interceptor
   - [x] 状态帮助函数 (statusColor/statusText) + 单元测试
+  - [x] **Round 1 new**: ErrorBoundary 组件、useLoadable hook 基础
 - [x] Docker Compose：启动 server、web、4 个 agent 容器模拟多设备
-  - [x] `compose.yaml` (server + web + 4 agents with healthcheck)
-  - [x] Dockerfile × 3 (server, agent, web)
-  - [x] Windows-first 脚本 (dev.ps1, test.ps1, compose-down.ps1)
+- [x] 基础设施 — **Round 1 new**: .dockerignore、.env.example、LICENSE、test.ps1 退出码检测
 
 ### 阶段 2：运维能力增强 🚧
 
