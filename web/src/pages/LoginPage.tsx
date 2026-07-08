@@ -46,7 +46,7 @@ export default function LoginPage() {
         <Form
           layout="vertical"
           className="login-form"
-          initialValues={{ username: 'admin', password: 'admin' }}
+          initialValues={{ username: '', password: '' }}
           onFinish={submit}
         >
           <Form.Item name="username" label="用户名" rules={[{ required: true }]}>

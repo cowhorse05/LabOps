@@ -27,6 +27,14 @@ func (c *AgentClient) Send(v any) error {
 	return c.conn.WriteJSON(v)
 }
 
+// Close sends a normal closure message and closes the WebSocket connection.
+func (c *AgentClient) Close() {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	_ = c.conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "server shutting down"))
+	_ = c.conn.Close()
+}
+
 func (a *App) handleAgentWS(w http.ResponseWriter, r *http.Request) {
 	if a.config.AgentToken != "" && r.URL.Query().Get("token") != a.config.AgentToken {
 		writeError(w, http.StatusUnauthorized, "invalid agent token")

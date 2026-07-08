@@ -22,7 +22,7 @@ export default function DeviceDetailPage() {
     return { device: nextDevice, tasks: allTasks.filter((task) => task.deviceId === id) };
   }, [id]);
 
-  const { data, loading, reload } = useLoadable(fetchData, {
+  const { data, loading, error, reload } = useLoadable(fetchData, {
     intervalMs: 3000,
     onError: () => message.error('加载设备详情失败'),
   });
@@ -52,6 +52,15 @@ export default function DeviceDetailPage() {
           刷新
         </Button>
       </div>
+
+      {error && (
+        <Card style={{ marginBottom: 16 }}>
+          <Typography.Text type="danger">加载设备详情失败，请检查网络后重试。</Typography.Text>
+          <Button icon={<ReloadOutlined />} onClick={reload} style={{ marginLeft: 8 }}>
+            重试
+          </Button>
+        </Card>
+      )}
 
       {device && (
         <>

@@ -5,13 +5,17 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/cowhorse05/labops/server/internal/core"
 )
 
 func main() {
-	ctx := context.Background()
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
 	dbPath := env("LABOPS_DB_PATH", "data/labops.db")
 	addr := env("LABOPS_ADDR", ":8080")
 
@@ -32,10 +36,27 @@ func main() {
 		TaskTimeout:      2 * time.Minute,
 	})
 
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: app.Handler(),
+	}
+
+	go func() {
+		<-ctx.Done()
+		log.Println("shutting down server...")
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer shutdownCancel()
+		app.Stop()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			log.Printf("server shutdown: %v", err)
+		}
+	}()
+
 	log.Printf("LabOps server listening on %s", addr)
-	if err := http.ListenAndServe(addr, app.Handler()); err != nil {
+	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 		log.Fatalf("listen: %v", err)
 	}
+	log.Println("server stopped")
 }
 
 func env(key, fallback string) string {

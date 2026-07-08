@@ -207,10 +207,17 @@ func (a *App) handleAiOpsReport(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, report)
 }
 
+const maxBodySize = 1 << 20 // 1 MiB
+
 func readJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 	defer r.Body.Close()
+	r.Body = http.MaxBytesReader(w, r.Body, maxBodySize)
 	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json body")
+		msg := "invalid json body"
+		if strings.Contains(err.Error(), "request body too large") {
+			msg = "request body too large"
+		}
+		writeError(w, http.StatusBadRequest, msg)
 		return false
 	}
 	return true

@@ -153,7 +153,7 @@ func (a *Analyzer) analyze(devices []Device, tasks []Task, groups []DeviceGroup)
 	}
 	for _, gs := range groupMap {
 		if gs.Total > 0 {
-			gs.AvgScore /= gs.Total
+			gs.AvgScore = int(float64(gs.AvgScore)/float64(gs.Total) + 0.5)
 		}
 	}
 
@@ -177,7 +177,7 @@ func (a *Analyzer) analyze(devices []Device, tasks []Task, groups []DeviceGroup)
 	// Overall health.
 	avgHealth := 0
 	if len(devices) > 0 {
-		avgHealth = totalScore / len(devices)
+		avgHealth = int(float64(totalScore)/float64(len(devices)) + 0.5)
 	}
 
 	summary := a.buildSummary(devices, onlineCnt, avgHealth, insights)

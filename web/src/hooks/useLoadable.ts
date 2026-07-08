@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 interface UseLoadableOptions {
   /** Auto-refresh interval in ms. 0 or undefined disables. */
@@ -14,6 +14,8 @@ interface UseLoadableOptions {
  *
  * Usage:
  *   const { data, loading, reload } = useLoadable(() => labopsApi.devices(), { intervalMs: 10000 });
+ *
+ * The fetcher is stored in a ref to avoid re-triggering the effect on every parent render.
  */
 export function useLoadable<T>(
   fetcher: () => Promise<T>,
@@ -23,25 +25,31 @@ export function useLoadable<T>(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
+  // Store fetcher and options in refs so load() has stable identity.
+  const fetcherRef = useRef(fetcher);
+  fetcherRef.current = fetcher;
+  const onErrorRef = useRef(options.onError);
+  onErrorRef.current = options.onError;
+  const errorMsgRef = useRef(options.errorMessage);
+  errorMsgRef.current = options.errorMessage;
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await fetcher();
+      const result = await fetcherRef.current();
       setData(result);
       setError(null);
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       setError(error);
-      options.onError?.(error);
-      if (options.errorMessage) {
-        // We don't import App.useApp here to keep the hook generic.
-        // Pages can handle error display via the error state.
-        console.error(`${options.errorMessage}:`, err);
+      onErrorRef.current?.(error);
+      if (errorMsgRef.current) {
+        console.error(`${errorMsgRef.current}:`, err);
       }
     } finally {
       setLoading(false);
     }
-  }, [fetcher, options.errorMessage, options.onError]);
+  }, []); // stable identity — never changes
 
   useEffect(() => {
     load();
@@ -66,6 +74,9 @@ export function useLoadableAll<T extends unknown[]>(
   const [data, setData] = useState<Result | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const onErrorRef = useRef(options.onError);
+  onErrorRef.current = options.onError;
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -73,6 +84,8 @@ export function useLoadableAll<T extends unknown[]>(
         fetchers.map((f) =>
           f().catch((err) => {
             console.error('useLoadableAll partial failure:', err);
+            const error = err instanceof Error ? err : new Error(String(err));
+            onErrorRef.current?.(error);
             return null;
           }),
         ),
