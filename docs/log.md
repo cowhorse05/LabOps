@@ -1,5 +1,37 @@
 # LabOps 变更日志
 
+## 2026-07-08 Round 3 — 完成 useLoadable 全页面重构
+
+### 变更
+
+- [x] **DashboardPage** — 5 源加载迁移到 `useLoadableAll` (173→151 行)
+- [x] **TasksPage** — 双源加载迁移到 `useLoadable` + `useCallback` fetcher
+- [x] **DeviceDetailPage** — device+tasks 加载迁移到 `useLoadable`
+- [x] **useLoadable hook** — 新增 `onError?: (error: Error) => void` 回调
+
+### 验证
+
+- [x] `npm run build` — **通过**
+- [x] git commit + push — **通过** (1f84692)
+
+### 自检
+
+- **没想到**: Linter 自动清理比手动 Edit 更彻底，TasksPage 残留旧代码被完全移除
+- **疏漏**: `onError` 回调已添加但无页面实际接入——需要后续轮次接入 antd message
+- **改进**: Web 7 个页面中 6 个已完成 useLoadable 迁移（仅 LoginPage 不需迁移），重构达成
+
+### 迁移状态
+
+| 页面 | 方式 | 自动刷新 | 状态 |
+|------|------|---------|------|
+| DashboardPage | useLoadableAll | 10s | ✅ R3 |
+| DevicesPage | useLoadable | 10s | ✅ R2 |
+| GroupsPage | useLoadable | 10s | ✅ R2 |
+| AuditPage | useLoadable | 15s | ✅ R2 |
+| TasksPage | useLoadable | 3s | ✅ R3 |
+| DeviceDetailPage | useLoadable | 3s | ✅ R3 |
+| LoginPage | N/A (mutation only) | - | ✅ R0 |
+
 ## 2026-07-08 Round 2 — useLoadable 重构 + 剩余 P1 修复
 
 ### 审查范围
