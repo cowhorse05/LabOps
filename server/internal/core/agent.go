@@ -185,15 +185,21 @@ func (a *App) unregisterClient(client *AgentClient) {
 		delete(a.clients, client.deviceID)
 	}
 	a.mu.Unlock()
-	_ = a.store.CloseSession(context.Background(), client.sessionID)
-	_ = a.store.MarkDeviceOffline(context.Background(), client.deviceID)
-	_ = a.store.CreateAudit(context.Background(), AuditLog{
+	if err := a.store.CloseSession(context.Background(), client.sessionID); err != nil {
+		log.Printf("error closing session %d for device %s: %v", client.sessionID, client.deviceID, err)
+	}
+	if err := a.store.MarkDeviceOffline(context.Background(), client.deviceID); err != nil {
+		log.Printf("error marking device %s offline: %v", client.deviceID, err)
+	}
+	if err := a.store.CreateAudit(context.Background(), AuditLog{
 		Actor:    "agent",
 		Action:   "agent.disconnect",
 		DeviceID: client.deviceID,
 		Status:   StatusOffline,
 		Message:  "agent connection closed",
-	})
+	}); err != nil {
+		log.Printf("error creating audit for device %s disconnect: %v", client.deviceID, err)
+	}
 }
 
 func (a *App) dispatchTask(ctx context.Context, task Task) error {
@@ -246,12 +252,16 @@ func (a *App) dispatchPendingTasks(ctx context.Context, deviceID string) error {
 	if err != nil {
 		return err
 	}
+	var firstErr error
 	for _, task := range tasks {
 		if err := a.dispatchTask(ctx, task); err != nil {
-			return err
+			if firstErr == nil {
+				firstErr = err
+			}
+			log.Printf("failed to dispatch pending task %s: %v", task.ID, err)
 		}
 	}
-	return nil
+	return firstErr
 }
 
 func deviceFromRegister(reg RegisterPayload) Device {

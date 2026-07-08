@@ -338,15 +338,6 @@ func (s *Store) FailTask(ctx context.Context, taskID, stderr string) error {
 }
 
 func (s *Store) CompleteTask(ctx context.Context, result TaskResultPayload) error {
-	// Idempotency check: skip if task already has a terminal status.
-	var currentStatus string
-	err := s.db.QueryRowContext(ctx, `SELECT status FROM tasks WHERE id = ?`, result.TaskID).Scan(&currentStatus)
-	if err != nil {
-		return err
-	}
-	if currentStatus == StatusSuccess || currentStatus == StatusFailed || currentStatus == StatusTimeout {
-		return nil
-	}
 	status := result.Status
 	if status == "" {
 		if result.ExitCode == 0 {
@@ -356,9 +347,20 @@ func (s *Store) CompleteTask(ctx context.Context, result TaskResultPayload) erro
 		}
 	}
 	now := nowString()
-	_, err = s.db.ExecContext(ctx, `UPDATE tasks SET status = ?, finished_at = ? WHERE id = ?`, status, now, result.TaskID)
+	// Atomic conditional update: only transition to a terminal status when the
+	// task is still in a non-terminal state (pending or running). This avoids
+	// the TOCTOU race of a separate SELECT-then-UPDATE — if another caller
+	// (e.g. TimeoutTasks) sets a terminal status between the two statements,
+	// this UPDATE matches zero rows and we silently skip it.
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE tasks SET status = ?, finished_at = ? WHERE id = ? AND status NOT IN (?, ?, ?)`,
+		status, now, result.TaskID, StatusSuccess, StatusFailed, StatusTimeout)
 	if err != nil {
 		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return nil // already in a terminal state, nothing to do
 	}
 	_, err = s.db.ExecContext(ctx, `INSERT OR REPLACE INTO task_results (task_id, stdout, stderr, exit_code, duration_ms, created_at)
 		VALUES (?, ?, ?, ?, ?, ?)`, result.TaskID, result.Stdout, result.Stderr, result.ExitCode, result.DurationMS, now)
