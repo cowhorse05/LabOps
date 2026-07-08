@@ -1,5 +1,65 @@
 # LabOps 变更日志
 
+## 2026-07-09 Round 15 — agent.go handler 层测试 + 最终审计
+
+### agent.go 测试 (0% → ~65% 函数覆盖)
+
+新增 `server/internal/core/agent_test.go`（589 行，10 测试函数，28 subtests）：
+
+| 测试 | Subtests | 覆盖函数 |
+|------|----------|---------|
+| `TestDeviceFromRegister` | 8 | deviceFromRegister 100% |
+| `TestRegisterClient` | 2 | registerClient 100% |
+| `TestUnregisterClient` | 2 | unregisterClient 72.7% |
+| `TestDispatchTask_NoClient` | 1 | dispatchTask 41.7% |
+| `TestDispatchPendingTasks` | 2 | dispatchPendingTasks 60.0% |
+| `TestRefreshState` | 1 | refreshState |
+| `TestAgentClientSend_Closed` | 1 | AgentClient.Send 66.7% |
+| `TestAgentClientClose_Idempotent` | 1 | AgentClient.Close 57.1% |
+| `TestRateLimiter` | 3 | rateLimiter |
+| `TestNewAppDefaults` | 1 | NewApp 默认值 |
+
+`handleAgentWS` (0%) 需要 WebSocket 集成测试——延迟。
+
+### 最终代码审计
+
+21 文件全面审计——结论：**生产就绪 8/10**。
+
+发现 3 个中等问题（延期至生产部署前）：
+
+| # | 严重度 | 问题 |
+|---|--------|------|
+| 1 | 中 | `FailTask`/`CompleteTask` 无事务包裹（两条 SQL 可能部分写入） |
+| 2 | 中 | 缺少 DB 索引：`tasks(device_id,status)`, `tasks(status,started_at)`, `audit_logs(device_id)`, `devices(group_name)` |
+| 3 | 中 | `DeviceDetailPage` 前端获取全部 tasks 再过滤（需新 API 端点） |
+
+8 个低级问题（信息性/建议性，不阻塞）。
+
+### 测试
+
+| 模块 | 结果 |
+|------|------|
+| server `go test ./...` | ✅ PASS (4.38s), **54 函数** (+10 from R14) |
+| agent `go test ./...` | ✅ PASS |
+| 覆盖率 (core) | **74.0%** (↑ 从 66.2%) |
+| 覆盖率 (total) | **71.3%** (↑ 从 63.8%) |
+| TypeScript | ✅ 零错误 |
+| `go vet` | ✅ 无警告 |
+
+### 自检
+
+- **没想到**: 子代理生成的 agent_test.go 长达 589 行，覆盖了 10 个测试函数——比预期更完整。`deviceFromRegister` 的 8 个 subtest 包含了空格、空值、默认值等所有边缘情况
+- **疏漏**: 工作目录 `cd` 到 server/ 后未重置，导致 `git status` 路径解析错误——后续 git 命令需要绝对路径或先 `cd` 回项目根
+- **改进**: 审计发现的 3 个中等问题应记录到 master-plan 的"已知限制"部分，避免丢失
+
+### 📋 Todolist
+
+- [x] ~~Round 15: agent.go 测试 + 最终审计~~
+- [ ] 生产部署前: SQL 事务包裹 FailTask/CompleteTask
+- [ ] 生产部署前: DB 索引优化
+- [ ] 生产部署前: DeviceDetailPage 专用 API 端点
+- [ ] 延期: admin 密码 / 静态 Token
+
 ## 2026-07-09 Round 14 — 死代码清理 + 文档更新 + 测试补充
 
 ### 死代码清理
