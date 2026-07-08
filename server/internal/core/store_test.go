@@ -74,16 +74,21 @@ func TestStoreDeviceTaskAuditFlow(t *testing.T) {
 
 func TestStoreEdgeCases(t *testing.T) {
 	ctx := context.Background()
-	store, err := OpenStore(":memory:")
-	if err != nil {
-		t.Fatalf("open store: %v", err)
-	}
-	defer store.Close()
-	if err := store.Init(ctx); err != nil {
-		t.Fatalf("init store: %v", err)
+	freshStore := func(t *testing.T) *Store {
+		t.Helper()
+		store, err := OpenStore(":memory:")
+		if err != nil {
+			t.Fatalf("open store: %v", err)
+		}
+		t.Cleanup(func() { store.Close() })
+		if err := store.Init(ctx); err != nil {
+			t.Fatalf("init store: %v", err)
+		}
+		return store
 	}
 
 	t.Run("TestFindUser", func(t *testing.T) {
+		store := freshStore(t)
 		// success — default admin user seeded during Init
 		user, ok, err := store.FindUser(ctx, "admin", "admin")
 		if err != nil {
@@ -116,6 +121,7 @@ func TestStoreEdgeCases(t *testing.T) {
 	})
 
 	t.Run("TestUpsertDevice_Update", func(t *testing.T) {
+		store := freshStore(t)
 		d := Device{
 			ID:          "update_test",
 			Name:        "original-name",
@@ -167,6 +173,7 @@ func TestStoreEdgeCases(t *testing.T) {
 	})
 
 	t.Run("TestHeartbeatAndOffline", func(t *testing.T) {
+		store := freshStore(t)
 		d := Device{
 			ID:          "hb_test",
 			Name:        "hb-test",
@@ -226,6 +233,7 @@ func TestStoreEdgeCases(t *testing.T) {
 	})
 
 	t.Run("TestExpireDevices", func(t *testing.T) {
+		store := freshStore(t)
 		oldTime := time.Now().UTC().Add(-2 * time.Hour).Format(time.RFC3339)
 		recentTime := time.Now().UTC().Add(-5 * time.Minute).Format(time.RFC3339)
 
@@ -297,6 +305,7 @@ func TestStoreEdgeCases(t *testing.T) {
 	})
 
 	t.Run("TestTimeoutTasks", func(t *testing.T) {
+		store := freshStore(t)
 		task, err := store.CreateTask(ctx, "timeout_device", "lab", "sleep 1000", "admin")
 		if err != nil {
 			t.Fatalf("CreateTask: %v", err)
@@ -330,6 +339,7 @@ func TestStoreEdgeCases(t *testing.T) {
 	})
 
 	t.Run("TestListDevicesByGroup", func(t *testing.T) {
+		store := freshStore(t)
 		devices := []Device{
 			{
 				ID: "group_lab_1", Name: "lab-device-1", GroupName: "lab",
@@ -382,6 +392,7 @@ func TestStoreEdgeCases(t *testing.T) {
 	})
 
 	t.Run("TestGroups", func(t *testing.T) {
+		store := freshStore(t)
 		devices := []Device{
 			{
 				ID: "gt_lab_online", Name: "lab-online", GroupName: "grouptest_lab",
@@ -445,6 +456,7 @@ func TestStoreEdgeCases(t *testing.T) {
 	})
 
 	t.Run("TestPendingTasksForDevice", func(t *testing.T) {
+		store := freshStore(t)
 		d1 := Device{
 			ID: "pending_device", Name: "pending-device", GroupName: "lab",
 			Profile: "ubuntu", Version: "1.0", Hostname: "pending-dev", OS: "Ubuntu",

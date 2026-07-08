@@ -367,7 +367,7 @@ func (s *Store) ListTasks(ctx context.Context) ([]Task, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var tasks []Task
+	tasks := make([]Task, 0)
 	for rows.Next() {
 		task, err := scanTaskWithResult(rows)
 		if err != nil {
