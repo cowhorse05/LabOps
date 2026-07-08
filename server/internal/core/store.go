@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
 	_ "modernc.org/sqlite"
 )
 
@@ -113,21 +114,29 @@ func (s *Store) Init(ctx context.Context) error {
 			return err
 		}
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO users (id, username, display_name, password, roles, created_at)
-		VALUES ('user_admin', 'admin', 'LabOps Admin', 'admin', 'admin,operator', ?)`, nowString())
+	hashed, err := bcrypt.GenerateFromPassword([]byte("admin"), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, `INSERT OR IGNORE INTO users (id, username, display_name, password, roles, created_at)
+		VALUES ('user_admin', 'admin', 'LabOps Admin', ?, 'admin,operator', ?)`, string(hashed), nowString())
 	return err
 }
 
 func (s *Store) FindUser(ctx context.Context, username, password string) (User, bool, error) {
 	var roles string
+	var storedHash string
 	var user User
-	err := s.db.QueryRowContext(ctx, `SELECT id, username, display_name, roles FROM users WHERE username = ? AND password = ?`, username, password).
-		Scan(&user.ID, &user.Username, &user.DisplayName, &roles)
+	err := s.db.QueryRowContext(ctx, `SELECT id, username, display_name, password, roles FROM users WHERE username = ?`, username).
+		Scan(&user.ID, &user.Username, &user.DisplayName, &storedHash, &roles)
 	if errors.Is(err, sql.ErrNoRows) {
 		return User{}, false, nil
 	}
 	if err != nil {
 		return User{}, false, err
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(password)); err != nil {
+		return User{}, false, nil
 	}
 	user.Roles = splitRoles(roles)
 	return user, true, nil

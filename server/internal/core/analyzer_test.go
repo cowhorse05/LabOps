@@ -267,9 +267,9 @@ func TestAnalyzer_MultipleDevices(t *testing.T) {
 		t.Errorf("OfflineCnt = %d, want 1", r.OfflineCnt)
 	}
 
-	// Scores: dev-a=100, dev-b=100, dev-c=60 => total=260, avg=260/3=86
+	// Scores: dev-a=100, dev-b=100, dev-c=60 => total=260, avg=260/3=87 (rounded)
 	if r.AvgHealth != 86 {
-		t.Errorf("AvgHealth = %d, want 86 (260/3)", r.AvgHealth)
+		t.Errorf("AvgHealth = %d, want 87 (260/3 rounded)", r.AvgHealth)
 	}
 
 	if len(r.Insights) != 3 {
