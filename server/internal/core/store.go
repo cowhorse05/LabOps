@@ -30,10 +30,14 @@ func OpenStore(path string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Allow up to 4 concurrent reads for read-heavy workloads; SQLite's
-	// built-in locking still serializes writes. modernc.org/sqlite manages
-	// concurrency internally and is safe with >1 MaxOpenConns.
-	db.SetMaxOpenConns(4)
+	// Allow multiple concurrent reads for file-based databases (read-heavy
+	// workloads). For :memory: databases, keep MaxOpenConns=1 because each
+	// connection creates its own in-memory database.
+	maxOpen := 1
+	if path != ":memory:" {
+		maxOpen = 4
+	}
+	db.SetMaxOpenConns(maxOpen)
 	if _, err := db.Exec("PRAGMA busy_timeout = 5000"); err != nil {
 		_ = db.Close()
 		return nil, err
