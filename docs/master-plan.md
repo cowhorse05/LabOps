@@ -248,6 +248,14 @@ Status 常量：`online/offline` (设备), `pending/running/success/failed/timeo
 
 ### 阶段 2：运维能力增强 🚧
 
+**2.6 AI Ops 智能分析** ✅ (新增)
+- [x] 服务端 `analyzer.go`：规则引擎分析设备状态
+- [x] 分析维度：离线检测、CPU/内存/磁盘阈值、任务失败率
+- [x] 设备健康评分 (0-100) + 分组聚合 + 告警计数
+- [x] 每 30 分钟自动分析
+- [x] Web 页面：仪表盘摘要、设备洞察卡片、分组概览表
+- [x] API: `GET /api/aiops/report`
+
 **2.1 设备分组与批量命令** ✅
 - [x] 设备分组基于 Agent 注册时的 `--group` 参数
 - [x] Web 按分组批量下发命令 (`POST /api/tasks` 支持 `groupName`)
