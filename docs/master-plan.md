@@ -299,7 +299,7 @@ Status 常量：`online/offline` (设备), `pending/running/success/failed/timeo
 | 前端 Vitest | ✅ 通过 |
 | 前端 TypeCheck + Build | ✅ 通过 |
 | 演示环境 (Server + Web 直连) | ✅ 可用 (:8090 + :5173) |
-| Docker Compose 全流程 | ⛔ 镜像拉取阻塞 |
+| Docker Compose 全流程 | ✅ 6 容器, 4 设备, 命令闭环验证通过 |
 
 ## 6. 核心工作流 (继承自 OpsService `/spec-impl`)
 
