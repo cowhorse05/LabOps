@@ -163,21 +163,22 @@ func (a *App) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tasks := make([]Task, 0, len(devices))
+	var errs []string
 	for _, device := range devices {
 		task, err := a.store.CreateTask(r.Context(), device.ID, device.GroupName, req.Command, "admin")
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error())
-			return
+			errs = append(errs, fmt.Sprintf("%s: create failed: %v", device.Name, err))
+			continue
 		}
 		task.DeviceName = device.Name
 		if err := a.dispatchTask(r.Context(), task); err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error())
-			return
+			errs = append(errs, fmt.Sprintf("%s: dispatch failed: %v", device.Name, err))
+			continue
 		}
 		fresh, ok, err := a.store.GetTask(r.Context(), task.ID)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error())
-			return
+			errs = append(errs, fmt.Sprintf("%s: verify failed: %v", device.Name, err))
+			continue
 		}
 		if ok {
 			tasks = append(tasks, fresh)
@@ -185,7 +186,22 @@ func (a *App) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 			tasks = append(tasks, task)
 		}
 	}
-	writeJSON(w, http.StatusCreated, createTaskResponse{Tasks: tasks})
+	if len(tasks) == 0 && len(errs) > 0 {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":  "all tasks failed",
+			"errors": errs,
+		})
+		return
+	}
+	resp := createTaskResponse{Tasks: tasks}
+	if len(errs) > 0 {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"tasks":  tasks,
+			"errors": errs,
+		})
+		return
+	}
+	writeJSON(w, http.StatusCreated, resp)
 }
 
 func (a *App) handleAuditLogs(w http.ResponseWriter, r *http.Request) {

@@ -18,25 +18,33 @@ type AgentClient struct {
 	sessionID int64
 	conn      *websocket.Conn
 	writeMu   sync.Mutex
+	closed    bool
 }
 
 func (c *AgentClient) Send(v any) error {
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
+	if c.closed {
+		return fmt.Errorf("client is closed")
+	}
 	_ = c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 	return c.conn.WriteJSON(v)
 }
 
-// Close sends a normal closure message and closes the WebSocket connection.
+// Close marks the client as closed and closes the WebSocket connection.
 func (c *AgentClient) Close() {
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
+	if c.closed {
+		return
+	}
+	c.closed = true
 	_ = c.conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "server shutting down"))
 	_ = c.conn.Close()
 }
 
 func (a *App) handleAgentWS(w http.ResponseWriter, r *http.Request) {
-	if a.config.AgentToken != "" && r.URL.Query().Get("token") != a.config.AgentToken {
+	if a.config.AgentToken != "" && r.Header.Get("X-Agent-Token") != a.config.AgentToken {
 		writeError(w, http.StatusUnauthorized, "invalid agent token")
 		return
 	}
@@ -166,7 +174,7 @@ func (a *App) registerClient(client *AgentClient) {
 	a.clients[client.deviceID] = client
 	a.mu.Unlock()
 	if old != nil {
-		_ = old.conn.Close()
+		old.Close()
 	}
 }
 

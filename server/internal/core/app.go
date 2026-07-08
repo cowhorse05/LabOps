@@ -24,8 +24,41 @@ type App struct {
 	upgrader websocket.Upgrader
 	analyzer *Analyzer
 
-	mu      sync.RWMutex
-	clients map[string]*AgentClient
+	mu           sync.RWMutex
+	clients      map[string]*AgentClient
+	rateLimiters map[string]*rateLimiter
+	rlMu         sync.Mutex
+}
+
+type rateLimiter struct {
+	tokens    int
+	maxTokens int
+	interval  time.Duration
+	last      time.Time
+}
+
+func (rl *rateLimiter) allow() bool {
+	now := time.Now()
+	elapsed := now.Sub(rl.last)
+	rl.last = now
+	rl.tokens += int(elapsed / rl.interval)
+	if rl.tokens > rl.maxTokens {
+		rl.tokens = rl.maxTokens
+	}
+	if rl.tokens <= 0 {
+		return false
+	}
+	rl.tokens--
+	return true
+}
+
+func newRateLimiter(maxTokens int, interval time.Duration) *rateLimiter {
+	return &rateLimiter{
+		tokens:    maxTokens,
+		maxTokens: maxTokens,
+		interval:  interval,
+		last:      time.Now(),
+	}
 }
 
 func NewApp(store *Store, config Config) *App {
@@ -36,9 +69,10 @@ func NewApp(store *Store, config Config) *App {
 		config.TaskTimeout = 2 * time.Minute
 	}
 	app := &App{
-		store:  store,
-		config: config,
-		clients: make(map[string]*AgentClient),
+		store:        store,
+		config:       config,
+		clients:      make(map[string]*AgentClient),
+		rateLimiters: make(map[string]*rateLimiter),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool { return true },
 		},
@@ -75,7 +109,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/audit-logs", a.handleAuditLogs)
 	mux.HandleFunc("GET /api/aiops/report", a.handleAiOpsReport)
 	mux.HandleFunc("GET /api/agent/ws", a.handleAgentWS)
-	return a.withCORS(a.withAuth(mux))
+	return a.withCORS(a.withRateLimit(a.withAuth(mux)))
 }
 
 func (a *App) withCORS(next http.Handler) http.Handler {
@@ -108,6 +142,28 @@ func (a *App) withAuth(next http.Handler) http.Handler {
 		}
 		if r.Header.Get("Authorization") != "Bearer "+a.config.WebToken {
 			writeError(w, http.StatusUnauthorized, "missing or invalid token")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (a *App) withRateLimit(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ip := r.RemoteAddr
+		// Strip port if present.
+		if idx := strings.LastIndex(ip, ":"); idx != -1 {
+			ip = ip[:idx]
+		}
+		a.rlMu.Lock()
+		rl, exists := a.rateLimiters[ip]
+		if !exists {
+			rl = newRateLimiter(60, time.Second)
+			a.rateLimiters[ip] = rl
+		}
+		a.rlMu.Unlock()
+		if !rl.allow() {
+			writeError(w, http.StatusTooManyRequests, "rate limit exceeded")
 			return
 		}
 		next.ServeHTTP(w, r)

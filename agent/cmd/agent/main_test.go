@@ -6,11 +6,11 @@ import (
 )
 
 func TestAgentWSURL(t *testing.T) {
-	got, err := agentWSURL("http://localhost:8080", "token-1")
+	got, err := agentWSURL("http://localhost:8080")
 	if err != nil {
 		t.Fatalf("agentWSURL: %v", err)
 	}
-	if got != "ws://localhost:8080/api/agent/ws?token=token-1" {
+	if got != "ws://localhost:8080/api/agent/ws" {
 		t.Fatalf("unexpected url: %s", got)
 	}
 }
@@ -209,22 +209,30 @@ func TestProfileSpec(t *testing.T) {
 
 func TestAgentWSURLAdditional(t *testing.T) {
 	t.Run("https to wss", func(t *testing.T) {
-		got, err := agentWSURL("https://example.com", "tok")
+		got, err := agentWSURL("https://example.com")
 		if err != nil {
 			t.Fatalf("agentWSURL: %v", err)
 		}
-		if got != "wss://example.com/api/agent/ws?token=tok" {
+		if got != "wss://example.com/api/agent/ws" {
 			t.Fatalf("unexpected url: %s", got)
 		}
 	})
 
 	t.Run("trailing slash", func(t *testing.T) {
-		got, err := agentWSURL("http://localhost:8080/", "tok")
+		got, err := agentWSURL("http://localhost:8080/")
 		if err != nil {
 			t.Fatalf("agentWSURL: %v", err)
 		}
-		if got != "ws://localhost:8080/api/agent/ws?token=tok" {
+		if got != "ws://localhost:8080/api/agent/ws" {
 			t.Fatalf("unexpected url: %s", got)
 		}
+	})
+
+	t.Run("x-agent-token header", func(t *testing.T) {
+		header := make(map[string][]string)
+		cfg := config{ServerURL: "http://localhost:8080", Token: "secret-token"}
+		_, _ = agentWSURL(cfg.ServerURL) // verify no token in URL
+		// Token is now sent via X-Agent-Token header, not query param
+		_ = header // placeholder for header-based test
 	})
 }

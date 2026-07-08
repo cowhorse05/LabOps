@@ -30,7 +30,10 @@ func OpenStore(path string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	db.SetMaxOpenConns(1)
+	// Allow up to 4 concurrent reads for read-heavy workloads; SQLite's
+	// built-in locking still serializes writes. modernc.org/sqlite manages
+	// concurrency internally and is safe with >1 MaxOpenConns.
+	db.SetMaxOpenConns(4)
 	if _, err := db.Exec("PRAGMA busy_timeout = 5000"); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -331,6 +334,15 @@ func (s *Store) FailTask(ctx context.Context, taskID, stderr string) error {
 }
 
 func (s *Store) CompleteTask(ctx context.Context, result TaskResultPayload) error {
+	// Idempotency check: skip if task already has a terminal status.
+	var currentStatus string
+	err := s.db.QueryRowContext(ctx, `SELECT status FROM tasks WHERE id = ?`, result.TaskID).Scan(&currentStatus)
+	if err != nil {
+		return err
+	}
+	if currentStatus == StatusSuccess || currentStatus == StatusFailed || currentStatus == StatusTimeout {
+		return nil
+	}
 	status := result.Status
 	if status == "" {
 		if result.ExitCode == 0 {
@@ -340,7 +352,7 @@ func (s *Store) CompleteTask(ctx context.Context, result TaskResultPayload) erro
 		}
 	}
 	now := nowString()
-	_, err := s.db.ExecContext(ctx, `UPDATE tasks SET status = ?, finished_at = ? WHERE id = ?`, status, now, result.TaskID)
+	_, err = s.db.ExecContext(ctx, `UPDATE tasks SET status = ?, finished_at = ? WHERE id = ?`, status, now, result.TaskID)
 	if err != nil {
 		return err
 	}

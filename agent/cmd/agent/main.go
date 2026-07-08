@@ -10,6 +10,7 @@ import (
 	"log"
 	"math"
 	"math/rand"
+	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
@@ -111,12 +112,16 @@ func parseFlags() config {
 }
 
 func run(cfg config) error {
-	wsURL, err := agentWSURL(cfg.ServerURL, cfg.Token)
+	wsURL, err := agentWSURL(cfg.ServerURL)
 	if err != nil {
 		return err
 	}
 	log.Printf("connecting to %s as %s", cfg.ServerURL, cfg.Name)
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	header := http.Header{}
+	if cfg.Token != "" {
+		header.Set("X-Agent-Token", cfg.Token)
+	}
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, header)
 	if err != nil {
 		return err
 	}
@@ -327,7 +332,7 @@ func jitter(base float64) float64 {
 	return math.Round(value*10) / 10
 }
 
-func agentWSURL(serverURL, token string) (string, error) {
+func agentWSURL(serverURL string) (string, error) {
 	u, err := url.Parse(serverURL)
 	if err != nil {
 		return "", err
@@ -339,9 +344,6 @@ func agentWSURL(serverURL, token string) (string, error) {
 		u.Scheme = "ws"
 	}
 	u.Path = strings.TrimRight(u.Path, "/") + "/api/agent/ws"
-	q := u.Query()
-	q.Set("token", token)
-	u.RawQuery = q.Encode()
 	return u.String(), nil
 }
 
