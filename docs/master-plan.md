@@ -237,6 +237,15 @@ Status 常量：`online/offline` (设备), `pending/running/success/failed/timeo
 - [x] Docker Compose：启动 server、web、4 个 agent 容器模拟多设备
 - [x] 基础设施 — **Round 1 new**: .dockerignore、.env.example、LICENSE、test.ps1 退出码检测
 
+### 阶段 1.5：质量补全 ✅ (Round 1-4)
+
+- [x] Web: ErrorBoundary (R1)、useLoadable hook (R1)、全页面迁移 (R2-R3)
+- [x] Web: onError 接入 4 页面 (R4)、TypeScript 类型收窄 (R4)
+- [x] Agent: 心跳错误重连 (R1)、指数退避 (R2)、panic recover (R2)、jitter 修复 (R2)
+- [x] Server: UpsertDevice 修复 (R1)、newID 碰撞修复 (R2)、GetTask error (R2)、maintenance log (R4)
+- [x] Infra: test.ps1 (R1)、.dockerignore (R1)、.env.example (R1)、LICENSE (R1)、Dockerfile HEALTHCHECK (R2)
+- [x] Tests: store_test 扩展 9 用例 (R4)、agent_test 扩展 19 用例 (R4)、status.test (R0)
+
 ### 阶段 2：运维能力增强 🚧
 
 **2.1 设备分组与批量命令** ✅

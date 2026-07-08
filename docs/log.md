@@ -1,5 +1,34 @@
 # LabOps 变更日志
 
+## 2026-07-08 Round 4 — 测试补充 + onError + 类型修复
+
+### 变更
+
+**Web:**
+- [x] **Hook fix**: `useLoadable` 的 `onError` 之前只定义未调用——现已修复并在 load() 中调用
+- [x] **onError 接入**: Dashboard/Devices/Groups/Audit 页面接入 onError Toast
+- [x] **TypeScript**: 移除 `Device.status` 和 `Task.status` 的 `| string` 类型拓宽
+
+**Server:**
+- [x] **maintenance loop**: `ExpireDevices`/`TimeoutTasks` 错误改用 `log.Printf` 记录
+
+**Tests:**
+- [x] **store_test.go**: 新增 `TestStoreEdgeCases` 9 个 subtest (FindUser, UpsertDevice, Heartbeat, ExpireDevices, TimeoutTasks, ListDevicesByGroup, Groups, PendingTasks, ListTasks_Empty)
+- [x] **agent_test.go**: 新增 19 个 subtest (sanitizeID×8, jitter×3, profileSpec×6, agentWSURL×2)
+
+### 验证
+
+- [x] `npm run build` (tsc + vite) — **通过**
+- [x] `tsc --noEmit` — **通过** (移除 `| string` 无破坏)
+- [x] git push — **通过** (385dd41)
+- [ ] `go test ./...` — **待环境**
+
+### 自检
+
+- **没想到**: `onError` 在 Round 3 定义但从未调用——hook bug 直到本轮才被发现
+- **疏漏**: `app.go`/`api.go`/`agent.go` 的 HTTP handler 测试仍为空
+- **改进**: 后续用 `net/http/httptest` 添加 handler 层测试
+
 ## 2026-07-08 Round 3 — 完成 useLoadable 全页面重构
 
 ### 变更
