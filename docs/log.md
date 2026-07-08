@@ -1,5 +1,43 @@
 # LabOps 变更日志
 
+## 2026-07-09 Round 12 — 协作者提交审查 + Docker 构建修复
+
+### 协作者提交审查 (f067fec)
+
+提交信息标注 7 项修复，实际仅 `store.go` MaxOpenConns 一处改动：
+- [x] **实际改动**: SQLite `:memory:` 模式下 `MaxOpenConns=1`（每个连接创建独立内存数据库，>1 会导致数据隔离问题）
+- [x] 修复前: 8 个测试因 `no such table` 失败；修复后: 全部通过
+- [~] 其余 6 项（bcrypt 哈希、部分失败收集、重连竞态守卫、X-Agent-Token 头、CompleteTask 幂等、速率限制）早已存在于代码中——提交信息有误导
+
+### 紧急修复
+
+- [x] **P0: Docker 构建失败** — `server/go.mod` 声明 `go 1.25.0` 但 `server/Dockerfile` 使用 `golang:1.23-alpine`，导致 `go mod download` 报错 `go.mod requires go >= 1.25.0 (running go 1.23.12)`。修复：`golang:1.23-alpine` → `golang:1.25-alpine`
+- [x] **P1: analyzer_test.go** — `TestAnalyzer_MultipleDevices` 断言值错误 `!= 86` 应为 `!= 87`（260/3=86.67 四舍五入为 87）
+- [x] **清理**: 删除损坏的空目录 `server;D/`（文件系统残留，未被 git 追踪）
+
+### 测试
+
+| 模块 | 结果 |
+|------|------|
+| server `go test ./...` | ✅ PASS (4.096s) |
+| agent `go test ./...` | ✅ PASS (1.826s) |
+
+### 自检
+
+- **没想到**: 协作者提交信息夸大实际改动范围——7 项标注中仅 1 项为实际新增。代码审查确认其余 6 项在 `188b8fd` 之前已实现，无代码丢失
+- **疏漏**: `go.mod` 升级到 1.25.0 时 Dockerfile 未同步更新——构建阻断被遗漏，直到重建时才暴露。根源：当前运行容器是基于旧镜像，`docker compose up -d` 未触发重建
+- **改进**: 建议添加 CI 步骤检查 `go.mod` 中的 `go` 指令与 Dockerfile 中的 `FROM golang:X.Y` 版本一致性
+
+### 待处理（低优先级）
+
+| 项 | 说明 |
+|----|------|
+| 硬编码 admin 密码 | `store.go` 种子密码 "admin"，无首次登录强制修改 |
+| 静态 Token | 无过期/会话机制，共享同一 WebToken |
+| CompleteTask TOCTOU | SELECT 和 UPDATE 之间有微小竞态窗口 |
+| dispatchPendingTasks | 首个任务失败后跳过剩余任务，无部分失败收集 |
+| 文档更新 | master-plan.md/user-manual.md/README.md 待同步新功能 |
+
 ## 2026-07-08 R7-R10 — 测试补全 + AI Ops + 使用手册 + 收尾
 
 ### R7: auth 中间件测试
