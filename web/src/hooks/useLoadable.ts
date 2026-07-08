@@ -5,6 +5,8 @@ interface UseLoadableOptions {
   intervalMs?: number;
   /** Error message shown on failure via App.useApp().message. */
   errorMessage?: string;
+  /** Callback invoked when an error occurs, e.g. to show a Toast. */
+  onError?: (error: Error) => void;
 }
 
 /**

@@ -1,46 +1,24 @@
-import { useEffect, useState } from 'react';
 import { Button, Card, Col, Progress, Row, Skeleton, Space, Statistic, Table, Tag, Typography } from 'antd';
 import { ArrowRightOutlined, DesktopOutlined, PlayCircleOutlined, ProfileOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { labopsApi } from '@/api/labops';
-import type { AuditLog, Device, DeviceGroup, DeviceStats, Task } from '@/types';
 import { statusColor, statusText } from '@/utils/status';
+import { useLoadableAll } from '@/hooks/useLoadable';
 
 export default function DashboardPage() {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<DeviceStats>({ total: 0, online: 0, offline: 0 });
-  const [devices, setDevices] = useState<Device[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [groups, setGroups] = useState<DeviceGroup[]>([]);
-  const [audits, setAudits] = useState<AuditLog[]>([]);
 
-  async function load() {
-    setLoading(true);
-    try {
-      const results = await Promise.allSettled([
-        labopsApi.stats(),
-        labopsApi.devices(),
-        labopsApi.tasks(),
-        labopsApi.groups(),
-        labopsApi.auditLogs(),
-      ]);
-      setStats(results[0].status === 'fulfilled' ? results[0].value : { total: 0, online: 0, offline: 0 });
-      setDevices(results[1].status === 'fulfilled' ? results[1].value : []);
-      setTasks(results[2].status === 'fulfilled' ? results[2].value : []);
-      setGroups(results[3].status === 'fulfilled' ? results[3].value : []);
-      setAudits(results[4].status === 'fulfilled' ? results[4].value : []);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const { data, loading, reload } = useLoadableAll(
+    [labopsApi.stats, labopsApi.devices, labopsApi.tasks, labopsApi.groups, labopsApi.auditLogs],
+    { intervalMs: 10000 },
+  );
 
-  useEffect(() => {
-    load();
-    const timer = window.setInterval(load, 10000);
-    return () => window.clearInterval(timer);
-  }, []);
+  const stats = data?.[0] ?? { total: 0, online: 0, offline: 0 };
+  const devices = data?.[1] ?? [];
+  const tasks = data?.[2] ?? [];
+  const groups = data?.[3] ?? [];
+  const audits = data?.[4] ?? [];
 
   const onlineRate = stats.total ? Math.round((stats.online / stats.total) * 100) : 0;
 
@@ -51,7 +29,7 @@ export default function DashboardPage() {
           <Typography.Title level={2}>仪表盘</Typography.Title>
           <Typography.Text className="muted">今天是 {dayjs().format('YYYY-MM-DD')}，当前展示 Docker 模拟设备的真实连接状态。</Typography.Text>
         </div>
-        <Button size="large" icon={<ReloadOutlined />} onClick={load}>
+        <Button size="large" icon={<ReloadOutlined />} onClick={reload}>
           刷新
         </Button>
       </div>

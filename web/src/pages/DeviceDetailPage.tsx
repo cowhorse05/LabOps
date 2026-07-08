@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { useLoadable } from '@/hooks/useLoadable';
 import { App, Button, Card, Col, Descriptions, Input, Progress, Row, Space, Table, Tag, Typography } from 'antd';
 import { PlayCircleOutlined, ReloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -12,23 +13,18 @@ const defaultCommand = 'uname -a && echo hello-from-labops';
 export default function DeviceDetailPage() {
   const { id } = useParams();
   const { message } = App.useApp();
-  const [device, setDevice] = useState<Device | null>(null);
-  const [tasks, setTasks] = useState<Task[]>([]);
   const [command, setCommand] = useState(defaultCommand);
-  const [loading, setLoading] = useState(false);
   const [running, setRunning] = useState(false);
 
-  async function load() {
-    if (!id) return;
-    setLoading(true);
-    try {
-      const [nextDevice, nextTasks] = await Promise.all([labopsApi.device(id), labopsApi.tasks()]);
-      setDevice(nextDevice);
-      setTasks(nextTasks.filter((task) => task.deviceId === id));
-    } finally {
-      setLoading(false);
-    }
-  }
+  const fetchData = useCallback(async () => {
+    if (!id) return null;
+    const [nextDevice, allTasks] = await Promise.all([labopsApi.device(id), labopsApi.tasks()]);
+    return { device: nextDevice, tasks: allTasks.filter((task) => task.deviceId === id) };
+  }, [id]);
+
+  const { data, loading, reload } = useLoadable(fetchData, { intervalMs: 3000 });
+  const device = data?.device ?? null;
+  const tasks = data?.tasks ?? [];
 
   async function runCommand() {
     if (!id || !command.trim()) return;
@@ -36,26 +32,20 @@ export default function DeviceDetailPage() {
     try {
       await labopsApi.createTask({ deviceId: id, command });
       message.success('命令已下发');
-      await load();
+      await reload();
     } finally {
       setRunning(false);
     }
   }
 
-  useEffect(() => {
-    load();
-    const timer = window.setInterval(load, 3000);
-    return () => window.clearInterval(timer);
-  }, [id]);
-
-  return (
+return (
     <div className="page">
       <div className="page-head">
         <div>
           <Typography.Title level={2}>{device?.name || '设备详情'}</Typography.Title>
           <Typography.Text className="muted">查看资产、实时指标，并向 Agent 下发命令。</Typography.Text>
         </div>
-        <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>
+        <Button icon={<ReloadOutlined />} onClick={reload} loading={loading}>
           刷新
         </Button>
       </div>

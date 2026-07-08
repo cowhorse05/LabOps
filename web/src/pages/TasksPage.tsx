@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { App, Button, Card, Form, Input, Select, Space, Table, Tag, Typography } from 'antd';
+import { useLoadable } from '@/hooks/useLoadable';
 import { PlayCircleOutlined, ReloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { labopsApi } from '@/api/labops';
@@ -9,25 +10,22 @@ import { statusColor, statusText } from '@/utils/status';
 export default function TasksPage() {
   const { message } = App.useApp();
   const [form] = Form.useForm<{ groupName: string; command: string }>();
-  const [groups, setGroups] = useState<DeviceGroup[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  async function load() {
-    setLoading(true);
-    try {
-      const [nextGroups, nextTasks] = await Promise.all([labopsApi.groups(), labopsApi.tasks()]);
-      setGroups(nextGroups);
-      setTasks(nextTasks);
-      // Set default group after data loads (initialValues only reads on first mount)
-      if (nextGroups.length > 0 && !form.getFieldValue('groupName')) {
-        form.setFieldsValue({ groupName: nextGroups[0].name });
-      }
-    } finally {
-      setLoading(false);
+  const fetcher = useCallback(async () => {
+    const [nextGroups, nextTasks] = await Promise.all([labopsApi.groups(), labopsApi.tasks()]);
+    return { groups: nextGroups, tasks: nextTasks };
+  }, []);
+
+  const { data, loading, reload } = useLoadable(fetcher, { intervalMs: 3000 });
+  const groups = data?.groups ?? [];
+  const tasks = data?.tasks ?? [];
+
+  useEffect(() => {
+    if (groups.length > 0 && !form.getFieldValue('groupName')) {
+      form.setFieldsValue({ groupName: groups[0].name });
     }
-  }
+  }, [groups, form]);
 
   async function submit(values: { groupName: string; command: string }) {
     setSubmitting(true);
@@ -35,26 +33,20 @@ export default function TasksPage() {
       const result = await labopsApi.createTask({ groupName: values.groupName, command: values.command });
       message.success(`已创建 ${result.tasks.length} 个任务`);
       form.setFieldsValue({ command: values.command });
-      await load();
+      await reload();
     } finally {
       setSubmitting(false);
     }
   }
 
-  useEffect(() => {
-    load();
-    const timer = window.setInterval(load, 3000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  return (
+return (
     <div className="page">
       <div className="page-head">
         <div>
           <Typography.Title level={2}>任务</Typography.Title>
           <Typography.Text className="muted">创建批量命令任务，并查看每台设备的独立结果。</Typography.Text>
         </div>
-        <Button icon={<ReloadOutlined />} onClick={load}>
+        <Button icon={<ReloadOutlined />} onClick={reload}>
           刷新
         </Button>
       </div>
