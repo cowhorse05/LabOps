@@ -70,7 +70,11 @@ export default function AiOpsPage() {
         message.info(data.message || '分析进行中');
       }
     } catch {
-      // first load before analysis runs is expected
+      if (report) {
+        // Already have data, keep showing last report on refresh failure
+      } else {
+        message.warning('AI Ops 分析数据加载失败，请稍后刷新');
+      }
     } finally {
       setLoading(false);
     }

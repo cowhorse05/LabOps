@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"sync"
@@ -58,13 +59,19 @@ type Analyzer struct {
 
 	mu     sync.RWMutex
 	latest *AiOpsReport
+	done   chan struct{}
 }
 
 // NewAnalyzer creates an Analyzer and starts its periodic analysis loop.
 func NewAnalyzer(store *Store, config Config) *Analyzer {
-	a := &Analyzer{store: store, config: config}
+	a := &Analyzer{store: store, config: config, done: make(chan struct{})}
 	go a.loop()
 	return a
+}
+
+// Stop gracefully shuts down the analyzer loop.
+func (a *Analyzer) Stop() {
+	close(a.done)
 }
 
 func (a *Analyzer) loop() {
@@ -72,8 +79,13 @@ func (a *Analyzer) loop() {
 	a.run(context.Background())
 	ticker := time.NewTicker(30 * time.Minute)
 	defer ticker.Stop()
-	for range ticker.C {
-		a.run(context.Background())
+	for {
+		select {
+		case <-a.done:
+			return
+		case <-ticker.C:
+			a.run(context.Background())
+		}
 	}
 }
 
@@ -87,10 +99,17 @@ func (a *Analyzer) LatestReport() *AiOpsReport {
 func (a *Analyzer) run(ctx context.Context) {
 	devices, err := a.store.ListDevices(ctx)
 	if err != nil {
+		log.Printf("aiops: ListDevices error: %v", err)
 		return
 	}
-	tasks, _ := a.store.ListTasks(ctx)
-	groups, _ := a.store.Groups(ctx)
+	tasks, err := a.store.ListTasks(ctx)
+	if err != nil {
+		log.Printf("aiops: ListTasks error: %v", err)
+	}
+	groups, err := a.store.Groups(ctx)
+	if err != nil {
+		log.Printf("aiops: Groups error: %v", err)
+	}
 
 	report := a.analyze(devices, tasks, groups)
 
