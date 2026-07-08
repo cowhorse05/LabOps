@@ -1,5 +1,43 @@
 # LabOps 变更日志
 
+## 2026-07-08 R7-R10 — 测试补全 + AI Ops + 使用手册 + 收尾
+
+### R7: auth 中间件测试
+- [x] api_test: +4 auth tests (NoToken/ValidToken/InvalidToken/SkipPaths)
+- [x] api_test: 全部 19 测试添加 t.Parallel()
+
+### R8: 边缘用例 + 无障碍
+- [x] api_test: +5 tests (GetDevice/GetTask found+notFound, ByGroup, InvalidJSON)
+- [x] AppLayout brand div→keyboard accessible
+- [x] DevicesPage search aria-label
+
+### Feature: AI Ops 智能分析
+- [x] analyzer.go: 规则引擎 (offline/CPU/Mem/Disk/Task 8 维度评分)
+- [x] 每 30min 自动分析, 设备健康分 0-100
+- [x] Web AiOpsPage: 摘要+统计卡片+设备洞察+分组概览
+- [x] API: GET /api/aiops/report
+
+### R9: AI Ops 修复 + 文档
+- [x] analyzer: Stop() + done channel 防 goroutine 泄漏
+- [x] analyzer: ListTasks/Groups 错误日志
+- [x] AiOpsPage: catch 块用户提示
+- [x] analyzer_test: 8 test cases
+- [x] docs/user-manual.md: 9 章节完整使用手册
+
+### R10: 最终收尾
+- [x] 文档更新, 项目指标汇总
+
+### 项目最终状态
+
+| 指标 | 值 |
+|------|-----|
+| Commits | 13 |
+| Source files | 32 (Go + TSX/TS) |
+| Tests | 5 files, 57+ cases |
+| Docs | 9 markdown |
+| API endpoints | 13 |
+| Web pages | 8 |
+
 ## 2026-07-08 Round 6 — P2 收尾 + 测试验证
 
 ### 修复
