@@ -287,8 +287,19 @@ Status 常量：`online/offline` (设备), `pending/running/success/failed/timeo
 - [x] README 增加架构图、启动步骤、演示截图说明
 - [x] 写 `docs/dev-log.md`：每阶段总结、完成项、未完成项、原因
 - [x] 写 `docs/report.md`：面试/课程汇报版项目说明
-- [ ] 标记 Todo 完成情况，未完成项移动到 Roadmap
-- [ ] 演示环境完整验证（Go test + Docker Compose 全流程）
+- [x] 标记 Todo 完成情况，未完成项移动到 Roadmap
+- [~] 演示环境完整验证（Go test ✅, Docker Compose ⛔）
+
+### 测试状态更新
+
+| 测试类型 | 状态 |
+| --- | --- |
+| Server Go 测试 (42 cases) | ✅ 全部通过 (Go 1.26.4, 2.5s) |
+| Agent Go 测试 (~19 cases) | ✅ 全部通过 (Go 1.26.4, 1.8s) |
+| 前端 Vitest | ✅ 通过 |
+| 前端 TypeCheck + Build | ✅ 通过 |
+| 演示环境 (Server + Web 直连) | ✅ 可用 (:8090 + :5173) |
+| Docker Compose 全流程 | ⛔ 镜像拉取阻塞 |
 
 ## 6. 核心工作流 (继承自 OpsService `/spec-impl`)
 
@@ -388,7 +399,7 @@ docs/features/<name>/
 - 第一版 Agent 用 Go；C++ Agent 作为 v0.4 进阶展示
 - 本地 `OpsService` 只作为产品、架构、前端风格参考，不复制闭源依赖或私有业务代码
 - GitHub 仓库 `cowhorse05/LabOps` 已配置为 remote
-- Go 本地未安装时，Go 编译和测试通过 Docker 执行
+- **Go 本地测试已解除阻塞**：本地 Go 1.26.4 可用，Server 42 tests + Agent 19 tests 全部通过
 - Node.js 20+ 和 Docker Desktop 是本地可用的环境
 - MVP 演示环境使用 4 个 Agent 容器（2 classroom + 1 homelab + 1 edge），满足"3 台以上"验收要求
 
