@@ -47,7 +47,7 @@ export default function AppLayout() {
   return (
     <Layout className="shell">
       <Sider width={232} className="shell-sider">
-        <div className="brand" onClick={() => navigate('/dashboard')}>
+        <div className="brand" onClick={() => navigate('/dashboard')} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') navigate('/dashboard'); }}>
           <div className="brand-mark">L</div>
           <div>
             <div className="brand-name">LabOps</div>

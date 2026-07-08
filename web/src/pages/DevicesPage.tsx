@@ -31,6 +31,7 @@ export default function DevicesPage() {
             allowClear
             prefix={<SearchOutlined />}
             placeholder="搜索设备、分组、IP"
+            aria-label="搜索设备"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             style={{ width: 280 }}

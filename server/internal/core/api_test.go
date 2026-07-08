@@ -609,3 +609,240 @@ func TestWithAuth_SkipPaths(t *testing.T) {
 		t.Fatalf("expected 200 for /api/auth/login, got %d", w2.Code)
 	}
 }
+
+func TestHandleGetDevice_Found(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store, _ := OpenStore(":memory:")
+	defer store.Close()
+	store.Init(ctx)
+
+	device := Device{
+		ID:          "found-device",
+		Name:        "found-agent",
+		GroupName:   "lab",
+		Profile:     "ubuntu",
+		Version:     "1.0",
+		Hostname:    "found-agent",
+		OS:          "Ubuntu",
+		IP:          "10.10.0.30",
+		CPUCores:    8,
+		MemoryMB:    8192,
+		DiskTotalGB: 128,
+		Status:      StatusOnline,
+	}
+	if err := store.UpsertDevice(ctx, device); err != nil {
+		t.Fatalf("upsert device: %v", err)
+	}
+
+	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
+	handler := app.Handler()
+
+	req := httptest.NewRequest("GET", "/api/devices/found-device", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	var got Device
+	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got.ID != "found-device" {
+		t.Fatalf("expected id found-device, got %s", got.ID)
+	}
+	if got.Name != "found-agent" {
+		t.Fatalf("expected name found-agent, got %s", got.Name)
+	}
+	if got.GroupName != "lab" {
+		t.Fatalf("expected groupName lab, got %s", got.GroupName)
+	}
+	if got.Status != StatusOnline {
+		t.Fatalf("expected status online, got %s", got.Status)
+	}
+}
+
+func TestHandleCreateTask_ByGroup(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store, _ := OpenStore(":memory:")
+	defer store.Close()
+	store.Init(ctx)
+
+	devices := []Device{
+		{
+			ID: "group-task-a", Name: "group-task-a", GroupName: "target-group",
+			Profile: "ubuntu", Version: "1.0", Hostname: "group-task-a",
+			OS: "Ubuntu", IP: "10.10.1.1", CPUCores: 2, MemoryMB: 2048,
+			DiskTotalGB: 32, Status: StatusOnline,
+		},
+		{
+			ID: "group-task-b", Name: "group-task-b", GroupName: "target-group",
+			Profile: "ubuntu", Version: "1.0", Hostname: "group-task-b",
+			OS: "Ubuntu", IP: "10.10.1.2", CPUCores: 2, MemoryMB: 2048,
+			DiskTotalGB: 32, Status: StatusOnline,
+		},
+	}
+	for _, d := range devices {
+		if err := store.UpsertDevice(ctx, d); err != nil {
+			t.Fatalf("upsert device %s: %v", d.ID, err)
+		}
+	}
+
+	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
+	handler := app.Handler()
+
+	reqBody := createTaskRequest{GroupName: "target-group", Command: "echo hello"}
+	var buf bytes.Buffer
+	json.NewEncoder(&buf).Encode(reqBody)
+
+	req := httptest.NewRequest("POST", "/api/tasks", &buf)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp createTaskResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(resp.Tasks) != 2 {
+		t.Fatalf("expected 2 tasks, got %d", len(resp.Tasks))
+	}
+	for _, task := range resp.Tasks {
+		if task.Command != "echo hello" {
+			t.Fatalf("expected command 'echo hello', got %s", task.Command)
+		}
+		if task.Status != StatusPending {
+			t.Fatalf("expected status pending, got %s", task.Status)
+		}
+		if task.RequestedBy != "admin" {
+			t.Fatalf("expected requestedBy admin, got %s", task.RequestedBy)
+		}
+		if task.ID == "" {
+			t.Fatal("expected non-empty task ID")
+		}
+	}
+}
+
+func TestHandleCreateTask_InvalidJSON(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store, _ := OpenStore(":memory:")
+	defer store.Close()
+	store.Init(ctx)
+	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
+	handler := app.Handler()
+
+	req := httptest.NewRequest("POST", "/api/tasks", bytes.NewBufferString("{malformed}"))
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+	var errResp map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&errResp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if errResp["error"] == "" {
+		t.Fatal("expected error message in response")
+	}
+}
+
+func TestHandleGetTask_Found(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store, _ := OpenStore(":memory:")
+	defer store.Close()
+	store.Init(ctx)
+
+	device := Device{
+		ID: "get-task-device", Name: "get-task-agent", GroupName: "lab",
+		Profile: "ubuntu", Version: "1.0", Hostname: "get-task-agent",
+		OS: "Ubuntu", IP: "10.10.0.40", CPUCores: 4, MemoryMB: 4096,
+		DiskTotalGB: 64, Status: StatusOnline,
+	}
+	if err := store.UpsertDevice(ctx, device); err != nil {
+		t.Fatalf("upsert device: %v", err)
+	}
+
+	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
+	handler := app.Handler()
+
+	// Create a task via the handler first
+	reqBody := createTaskRequest{DeviceID: "get-task-device", Command: "echo hello"}
+	var buf bytes.Buffer
+	json.NewEncoder(&buf).Encode(reqBody)
+
+	createReq := httptest.NewRequest("POST", "/api/tasks", &buf)
+	createW := httptest.NewRecorder()
+	handler.ServeHTTP(createW, createReq)
+
+	if createW.Code != http.StatusCreated {
+		t.Fatalf("expected 201 creating task, got %d: %s", createW.Code, createW.Body.String())
+	}
+	var createResp createTaskResponse
+	if err := json.NewDecoder(createW.Body).Decode(&createResp); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	if len(createResp.Tasks) != 1 {
+		t.Fatalf("expected 1 task created, got %d", len(createResp.Tasks))
+	}
+	taskID := createResp.Tasks[0].ID
+
+	// Now GET the task by ID
+	getReq := httptest.NewRequest("GET", "/api/tasks/"+taskID, nil)
+	getW := httptest.NewRecorder()
+	handler.ServeHTTP(getW, getReq)
+
+	if getW.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", getW.Code)
+	}
+	var got Task
+	if err := json.NewDecoder(getW.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got.ID != taskID {
+		t.Fatalf("expected task id %s, got %s", taskID, got.ID)
+	}
+	if got.DeviceID != "get-task-device" {
+		t.Fatalf("expected deviceId get-task-device, got %s", got.DeviceID)
+	}
+	if got.Command != "echo hello" {
+		t.Fatalf("expected command 'echo hello', got %s", got.Command)
+	}
+	if got.Status != StatusPending {
+		t.Fatalf("expected status pending, got %s", got.Status)
+	}
+	if got.RequestedBy != "admin" {
+		t.Fatalf("expected requestedBy admin, got %s", got.RequestedBy)
+	}
+}
+
+func TestHandleGetTask_NotFound(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store, _ := OpenStore(":memory:")
+	defer store.Close()
+	store.Init(ctx)
+	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
+	handler := app.Handler()
+
+	req := httptest.NewRequest("GET", "/api/tasks/nonexistent-task", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", w.Code)
+	}
+	var errResp map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&errResp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if errResp["error"] == "" {
+		t.Fatal("expected error message in response")
+	}
+}
