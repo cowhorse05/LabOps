@@ -1,5 +1,32 @@
 # LabOps 变更日志
 
+## 2026-07-08 Round 6 — P2 收尾 + 测试验证
+
+### 修复
+
+**P2:**
+- [x] server: maintenance loop 添加 5s context timeout (防止 DB 锁时 goroutine 永久阻塞)
+- [x] server: CORS 添加 `Vary: Origin` 头 (防止缓存污染)
+- [x] server: agent 注册失败时发送 error 消息再断连 (而非静默断开)
+
+### 测试验证
+
+- [x] `api_test.go` 质量审查：语法 ✅ 隔离 ✅ httptest ✅ JSON ✅ import ✅ 覆盖率部分通过 ⚠️ `t.Parallel()` ❌
+- [x] 发现 7 个覆盖缺口：auth 中间件、GroupName 批量任务、GetDevice/GetTask 正常路径、无效 JSON body、CORS OPTIONS
+- [x] go.sum 已补全（HTTP test agent 自动执行了 `go mod tidy`）
+
+### 验证
+
+- [x] `npm run build` — **通过**
+- [x] git push — **通过** (37a4bb3, 4 files, +67)
+- [ ] `go test ./...` — **待环境**
+
+### 自检
+
+- **没想到**: HTTP test agent 在后台运行时自动执行了 `go mod tidy`，补全了之前缺失的 `go.sum`——意外收获
+- **疏漏**: 测试覆盖 7 个缺口未修复（最关键的：auth 中间件测试）
+- **改进**: 下一轮补充 auth 中间件测试 + `t.Parallel()`
+
 ## 2026-07-08 Round 5 — P0 安全加固 + HTTP handler 测试
 
 ### 审查
