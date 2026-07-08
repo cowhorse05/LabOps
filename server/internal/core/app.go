@@ -22,6 +22,7 @@ type App struct {
 	store    *Store
 	config   Config
 	upgrader websocket.Upgrader
+	analyzer *Analyzer
 
 	mu      sync.RWMutex
 	clients map[string]*AgentClient
@@ -42,6 +43,7 @@ func NewApp(store *Store, config Config) *App {
 			CheckOrigin: func(r *http.Request) bool { return true },
 		},
 	}
+	app.analyzer = NewAnalyzer(store, config)
 	go app.maintenanceLoop()
 	return app
 }
@@ -59,6 +61,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("POST /api/tasks", a.handleCreateTask)
 	mux.HandleFunc("GET /api/tasks/{id}", a.handleGetTask)
 	mux.HandleFunc("GET /api/audit-logs", a.handleAuditLogs)
+	mux.HandleFunc("GET /api/aiops/report", a.handleAiOpsReport)
 	mux.HandleFunc("GET /api/agent/ws", a.handleAgentWS)
 	return a.withCORS(a.withAuth(mux))
 }

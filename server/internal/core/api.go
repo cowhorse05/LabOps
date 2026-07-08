@@ -198,6 +198,15 @@ func (a *App) handleAuditLogs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, logs)
 }
 
+func (a *App) handleAiOpsReport(w http.ResponseWriter, r *http.Request) {
+	report := a.analyzer.LatestReport()
+	if report == nil {
+		writeJSON(w, http.StatusOK, map[string]string{"message": "analysis in progress, check back soon"})
+		return
+	}
+	writeJSON(w, http.StatusOK, report)
+}
+
 func readJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 	defer r.Body.Close()
 	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {

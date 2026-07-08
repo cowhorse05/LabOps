@@ -7,6 +7,7 @@ import DevicesPage from '@/pages/DevicesPage';
 import DeviceDetailPage from '@/pages/DeviceDetailPage';
 import TasksPage from '@/pages/TasksPage';
 import AuditPage from '@/pages/AuditPage';
+import AiOpsPage from '@/pages/AiOpsPage';
 import GroupsPage from '@/pages/GroupsPage';
 import { useAuthStore } from '@/stores/auth';
 
@@ -38,6 +39,7 @@ export const router = createBrowserRouter([
       { path: 'groups', element: <GroupsPage /> },
       { path: 'tasks', element: <TasksPage /> },
       { path: 'audit', element: <AuditPage /> },
+      { path: 'aiops', element: <AiOpsPage /> },
     ],
   },
 ]);

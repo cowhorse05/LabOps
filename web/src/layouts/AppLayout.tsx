@@ -4,6 +4,7 @@ import { Avatar, Button, Layout, Menu, Space, Tag, Typography, App } from 'antd'
 import {
   AuditOutlined,
   ClusterOutlined,
+  RobotOutlined,
   DashboardOutlined,
   DesktopOutlined,
   LogoutOutlined,
@@ -21,6 +22,7 @@ const navItems = [
   { key: '/groups', icon: <ClusterOutlined />, label: '分组' },
   { key: '/tasks', icon: <ProfileOutlined />, label: '任务' },
   { key: '/audit', icon: <AuditOutlined />, label: '审计' },
+  { key: '/aiops', icon: <RobotOutlined />, label: 'AI Ops' },
 ];
 
 export default function AppLayout() {
