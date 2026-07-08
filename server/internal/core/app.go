@@ -72,6 +72,7 @@ func (a *App) withCORS(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Origin", origin)
 		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Authorization,Content-Type")
+		w.Header().Set("Vary", "Origin")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -113,6 +114,8 @@ func (a *App) maintenanceLoop() {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 	for range ticker.C {
-		a.refreshState(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		a.refreshState(ctx)
+		cancel()
 	}
 }

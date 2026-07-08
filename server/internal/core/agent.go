@@ -63,10 +63,12 @@ func (a *App) handleAgentWS(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	if err := a.store.UpsertDevice(ctx, device); err != nil {
+		_ = conn.WriteJSON(map[string]string{"type": "error", "message": "registration failed: " + err.Error()})
 		return
 	}
 	sessionID, err := a.store.CreateSession(ctx, device.ID, r.RemoteAddr)
 	if err != nil {
+		_ = conn.WriteJSON(map[string]string{"type": "error", "message": "registration failed: " + err.Error()})
 		return
 	}
 	client := &AgentClient{deviceID: device.ID, sessionID: sessionID, conn: conn}
