@@ -10,6 +10,7 @@ import (
 )
 
 func TestHandleHealth(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := OpenStore(":memory:")
 	defer store.Close()
@@ -34,6 +35,7 @@ func TestHandleHealth(t *testing.T) {
 }
 
 func TestHandleLogin_Valid(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := OpenStore(":memory:")
 	defer store.Close()
@@ -65,6 +67,7 @@ func TestHandleLogin_Valid(t *testing.T) {
 }
 
 func TestHandleLogin_Invalid(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := OpenStore(":memory:")
 	defer store.Close()
@@ -93,6 +96,7 @@ func TestHandleLogin_Invalid(t *testing.T) {
 }
 
 func TestHandleMe(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := OpenStore(":memory:")
 	defer store.Close()
@@ -120,6 +124,7 @@ func TestHandleMe(t *testing.T) {
 }
 
 func TestHandleStats_Empty(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := OpenStore(":memory:")
 	defer store.Close()
@@ -150,6 +155,7 @@ func TestHandleStats_Empty(t *testing.T) {
 }
 
 func TestHandleDevices_Empty(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := OpenStore(":memory:")
 	defer store.Close()
@@ -174,6 +180,7 @@ func TestHandleDevices_Empty(t *testing.T) {
 }
 
 func TestHandleDevices_WithData(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := OpenStore(":memory:")
 	defer store.Close()
@@ -226,6 +233,7 @@ func TestHandleDevices_WithData(t *testing.T) {
 }
 
 func TestHandleGetDevice_NotFound(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := OpenStore(":memory:")
 	defer store.Close()
@@ -250,6 +258,7 @@ func TestHandleGetDevice_NotFound(t *testing.T) {
 }
 
 func TestHandleGroups(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := OpenStore(":memory:")
 	defer store.Close()
@@ -321,6 +330,7 @@ func TestHandleGroups(t *testing.T) {
 }
 
 func TestHandleCreateTask_SingleDevice(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := OpenStore(":memory:")
 	defer store.Close()
@@ -379,6 +389,7 @@ func TestHandleCreateTask_SingleDevice(t *testing.T) {
 }
 
 func TestHandleCreateTask_MissingCommand(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := OpenStore(":memory:")
 	defer store.Close()
@@ -407,6 +418,7 @@ func TestHandleCreateTask_MissingCommand(t *testing.T) {
 }
 
 func TestHandleCreateTask_MissingTarget(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := OpenStore(":memory:")
 	defer store.Close()
@@ -435,6 +447,7 @@ func TestHandleCreateTask_MissingTarget(t *testing.T) {
 }
 
 func TestHandleCreateTask_DeviceNotFound(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := OpenStore(":memory:")
 	defer store.Close()
@@ -463,6 +476,7 @@ func TestHandleCreateTask_DeviceNotFound(t *testing.T) {
 }
 
 func TestHandleTasks_Empty(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := OpenStore(":memory:")
 	defer store.Close()
@@ -487,6 +501,7 @@ func TestHandleTasks_Empty(t *testing.T) {
 }
 
 func TestHandleAudit_Empty(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := OpenStore(":memory:")
 	defer store.Close()
@@ -507,5 +522,90 @@ func TestHandleAudit_Empty(t *testing.T) {
 	}
 	if len(logs) != 0 {
 		t.Fatalf("expected 0 audit logs, got %d", len(logs))
+	}
+}
+
+func TestWithAuth_NoToken(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store, _ := OpenStore(":memory:")
+	defer store.Close()
+	store.Init(ctx)
+	app := NewApp(store, Config{WebToken: "secret-token", AgentToken: ""})
+	handler := app.Handler()
+
+	req := httptest.NewRequest("GET", "/api/devices", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestWithAuth_ValidToken(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store, _ := OpenStore(":memory:")
+	defer store.Close()
+	store.Init(ctx)
+	app := NewApp(store, Config{WebToken: "secret-token", AgentToken: ""})
+	handler := app.Handler()
+
+	req := httptest.NewRequest("GET", "/api/devices", nil)
+	req.Header.Set("Authorization", "Bearer secret-token")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+}
+
+func TestWithAuth_InvalidToken(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store, _ := OpenStore(":memory:")
+	defer store.Close()
+	store.Init(ctx)
+	app := NewApp(store, Config{WebToken: "secret-token", AgentToken: ""})
+	handler := app.Handler()
+
+	req := httptest.NewRequest("GET", "/api/devices", nil)
+	req.Header.Set("Authorization", "Bearer wrong-token")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestWithAuth_SkipPaths(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store, _ := OpenStore(":memory:")
+	defer store.Close()
+	store.Init(ctx)
+	app := NewApp(store, Config{WebToken: "secret-token", AgentToken: ""})
+	handler := app.Handler()
+
+	// /api/health should be accessible without token
+	req := httptest.NewRequest("GET", "/api/health", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for /api/health, got %d", w.Code)
+	}
+
+	// /api/auth/login should be accessible without token
+	loginBody := loginRequest{Username: "admin", Password: "admin"}
+	var buf bytes.Buffer
+	json.NewEncoder(&buf).Encode(loginBody)
+	req2 := httptest.NewRequest("POST", "/api/auth/login", &buf)
+	w2 := httptest.NewRecorder()
+	handler.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("expected 200 for /api/auth/login, got %d", w2.Code)
 	}
 }
