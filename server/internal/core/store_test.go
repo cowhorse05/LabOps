@@ -539,3 +539,56 @@ func TestStoreEdgeCases(t *testing.T) {
 		}
 	})
 }
+
+func TestSessionCRUD(t *testing.T) {
+	ctx := context.Background()
+	store, err := OpenStore(":memory:")
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+	if err := store.Init(ctx); err != nil {
+		t.Fatalf("init store: %v", err)
+	}
+
+	t.Run("CreateAndClose", func(t *testing.T) {
+		sessionID, err := store.CreateSession(ctx, "device-1", "192.168.1.1:12345")
+		if err != nil {
+			t.Fatalf("CreateSession: %v", err)
+		}
+		if sessionID <= 0 {
+			t.Fatalf("expected positive session ID, got %d", sessionID)
+		}
+
+		if err := store.CloseSession(ctx, sessionID); err != nil {
+			t.Fatalf("CloseSession: %v", err)
+		}
+	})
+
+	t.Run("CloseNonexistent", func(t *testing.T) {
+		if err := store.CloseSession(ctx, 99999); err != nil {
+			t.Fatalf("CloseSession on nonexistent ID should not error: %v", err)
+		}
+	})
+
+	t.Run("MultipleSessions", func(t *testing.T) {
+		id1, err := store.CreateSession(ctx, "device-a", "10.0.0.1:1111")
+		if err != nil {
+			t.Fatalf("CreateSession 1: %v", err)
+		}
+		id2, err := store.CreateSession(ctx, "device-b", "10.0.0.2:2222")
+		if err != nil {
+			t.Fatalf("CreateSession 2: %v", err)
+		}
+		if id1 == id2 {
+			t.Fatalf("expected distinct session IDs, got %d and %d", id1, id2)
+		}
+
+		if err := store.CloseSession(ctx, id1); err != nil {
+			t.Fatalf("CloseSession 1: %v", err)
+		}
+		if err := store.CloseSession(ctx, id2); err != nil {
+			t.Fatalf("CloseSession 2: %v", err)
+		}
+	})
+}

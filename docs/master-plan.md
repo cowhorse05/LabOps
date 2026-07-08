@@ -1,6 +1,6 @@
 # LabOps 开源运维系统计划
 
-> 状态：🚧 MVP 代码已交付，Go 测试/Docker 集成验证待环境恢复 · 日期：2026-07-08
+> 状态：✅ MVP 已完成，41 个 Go 测试全部通过，Docker Compose 验证通过，3 轮协作审计完成（f067fec, cfbd94e, 45fe65f），AI Ops 已运行，安全加固（速率限制/bcrypt/X-Agent-Token/TOCTOU）已完成 · 日期：2026-07-09
 > 本文件是 LabOps 项目的总体计划 SSOT（Single Source Of Truth）。各阶段的 design + tasks 拆分见对应 spec 目录。
 > 工作流遵循 OpsService 的 `/spec-impl` 模式，适配 Go/React 技术栈后形成 LabOps 特有惯例。
 
@@ -288,15 +288,15 @@ Status 常量：`online/offline` (设备), `pending/running/success/failed/timeo
 - [x] 写 `docs/dev-log.md`：每阶段总结、完成项、未完成项、原因
 - [x] 写 `docs/report.md`：面试/课程汇报版项目说明
 - [x] 标记 Todo 完成情况，未完成项移动到 Roadmap
-- [~] 演示环境完整验证（Go test ✅, Docker Compose ⛔）
+- [x] 演示环境完整验证（Go test ✅, Docker Compose ✅）
 
 ### 测试状态更新
 
 | 测试类型 | 状态 |
 | --- | --- |
-| Server Go 测试 (42 cases) | ✅ 全部通过 (Go 1.26.4, 2.5s) |
-| Agent Go 测试 (~19 cases) | ✅ 全部通过 (Go 1.26.4, 1.8s) |
-| 前端 Vitest | ✅ 通过 |
+| Server Go 测试 (34 函数) | ✅ 全部通过 (Go 1.25, 4.2s) |
+| Agent Go 测试 (7 函数) | ✅ 全部通过 (Go 1.23, 1.9s) |
+| 前端 Vitest (1 函数) | ✅ 通过 |
 | 前端 TypeCheck + Build | ✅ 通过 |
 | 演示环境 (Server + Web 直连) | ✅ 可用 (:8090 + :5173) |
 | Docker Compose 全流程 | ✅ 6 容器, 4 设备, 命令闭环验证通过 |
@@ -330,7 +330,7 @@ Status 常量：`online/offline` (设备), `pending/running/success/failed/timeo
 
 > 对应 OpsService 的 JDK8/DDD/@RequireAuth 约束，这是 LabOps 等效约束。
 
-1. **Go 1.23**：server 和 agent 的 `go.mod` 均声明 `go 1.23`。只用 Go 1.23 标准库 API，不引入实验性/unstable 包。
+1. **Go 1.25**：server `go.mod` 声明 `go 1.25`，agent `go.mod` 声明 `go 1.23`。只用 Go 1.25 标准库 API，不引入实验性/unstable 包。
 2. **无外部 Go 框架依赖**：server 只用 `net/http` + `gorilla/websocket` + `modernc/sqlite`。不引入 gin/echo/chi/gorilla mux 等 Web 框架，保持依赖最小化。
 3. **单模块简洁架构**：Go 代码用 `internal/core` 单包聚合核心逻辑（types + store + app + api + agent），不强制 DDD 分层。新功能如需拆分，先评估是否真的需要新包。
 4. **WebSocket 协议向后兼容**：envelope `{type, payload}` 结构不可变。新增 message type 只能追加 case，不能修改已有 type 的 payload schema。
@@ -383,13 +383,11 @@ docs/features/<name>/
 | 前端 TypeCheck | `tsc -b` 类型检查 | ✅ 通过 |
 | 前端 Build | `vite build` 构建 | ✅ 通过 |
 | Docker Compose Config | `docker compose config` | ✅ 通过 |
-| Docker Compose 全流程 | 完整命令闭环 | ⛔ 阻塞于 Docker image pull (`golang:1.23-alpine`) |
+| Docker Compose 全流程 | 完整命令闭环 | ✅ 6 容器, 4 设备, 命令闭环验证通过 |
 
 ### 7.3 阻塞项
 
-| 阻塞项 | 现象 | 临时方案 | 长期方案 |
-| --- | --- | --- | --- |
-| `golang:1.23-alpine` pull 失败 | Docker registry/network 不可达 | 本地安装 Go 后直接跑 `go test ./...` | 等网络恢复或配置镜像源 |
+当前无阻塞项。所有 Go 测试通过，Docker Compose 全流程验证通过。
 
 ## 8. Assumptions
 
@@ -399,7 +397,7 @@ docs/features/<name>/
 - 第一版 Agent 用 Go；C++ Agent 作为 v0.4 进阶展示
 - 本地 `OpsService` 只作为产品、架构、前端风格参考，不复制闭源依赖或私有业务代码
 - GitHub 仓库 `cowhorse05/LabOps` 已配置为 remote
-- **Go 本地测试已解除阻塞**：本地 Go 1.26.4 可用，Server 42 tests + Agent 19 tests 全部通过
+- **Go 本地测试已完成**：Server 34 测试函数 + Agent 7 测试函数全部通过，共 41 个 Go 测试通过
 - Node.js 20+ 和 Docker Desktop 是本地可用的环境
 - MVP 演示环境使用 4 个 Agent 容器（2 classroom + 1 homelab + 1 edge），满足"3 台以上"验收要求
 
@@ -409,11 +407,10 @@ docs/features/<name>/
 | --- | --- | --- |
 | v0.1 | 2026-07-08 | 初始化总体计划；完成阶段 0-1 MVP 实现 |
 | v0.2 | 2026-07-08 | 完善文档：追加项目结构详情、核心接口与数据流、工作流适配（继承 OpsService `/spec-impl`）、硬约束（Go 等效）、测试状态追踪、阻塞项记录 |
+| v0.3 | 2026-07-09 | 更新状态为 MVP 完成；Go 约束从 1.23 提升至 1.25；更新测试计数（Server 34, Agent 7, 前端 1）；移除已解决的阻塞项；追加 AI Ops、安全加固（速率限制/bcrypt/X-Agent-Token/TOCTOU）和协作审计轮次信息 |
 
 ## 10. 下一步建议
 
-1. **解除 Go 测试阻塞**：安装本地 Go 1.23 或配置 Docker 镜像源，完成 `go test ./...` 验证
-2. **完整集成验证**：启动 Docker Compose 全流程，验证 4 个 Agent 完整闭环
-3. **补充截图**：截取 Dashboard/Devices/DeviceDetail/Tasks/Audit 页面放入 README
-4. **v0.3 文件分发**：按 spec 约定创建 `docs/features/file-distribution/design.md` + `tasks.md`
-5. **CI 接入**：添加 GitHub Actions workflow，自动化 Go test + web build
+1. **补充截图**：截取 Dashboard/Devices/DeviceDetail/Tasks/Audit 页面放入 README
+2. **v0.3 文件分发**：按 spec 约定创建 `docs/features/file-distribution/design.md` + `tasks.md`
+3. **CI 接入**：添加 GitHub Actions workflow，自动化 Go test + web build

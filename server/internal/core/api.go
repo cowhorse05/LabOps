@@ -23,10 +23,6 @@ type createTaskRequest struct {
 	Command   string `json:"command"`
 }
 
-type createTaskResponse struct {
-	Tasks []Task `json:"tasks"`
-}
-
 func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

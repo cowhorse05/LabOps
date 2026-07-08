@@ -1,5 +1,44 @@
 # LabOps 变更日志
 
+## 2026-07-09 Round 14 — 死代码清理 + 文档更新 + 测试补充
+
+### 死代码清理
+
+- [x] `api.go`: 移除 `createTaskResponse` 结构体（cfbd94e 响应统一后仅测试中使用）
+- [x] `api_test.go`: 添加局部类型定义，测试编译通过
+
+### 文档更新
+
+- [x] `docs/master-plan.md`: 更新状态头、测试计数（41 函数）、Go 版本（1.25）、删除已解决阻塞项、更新 Docker Compose 状态
+- [x] `README.md`: MVP 功能列表新增 AI Ops
+
+### 测试补充
+
+- [x] `store_test.go`: 新增 `TestSessionCRUD` — 3 subtests (CreateAndClose, CloseNonexistent, MultipleSessions)
+- [x] 填补 `CreateSession`/`CloseSession` 0% 覆盖率缺口
+- [x] 覆盖率: 66.2% → ~68%（core 包）
+
+### 测试
+
+| 模块 | 结果 |
+|------|------|
+| server `go test ./...` | ✅ PASS (4.327s), 44 函数 |
+| agent `go test ./...` | ✅ PASS |
+| TypeScript `tsc --noEmit` | ✅ 零错误 |
+| `go vet ./...` | ✅ 无警告 |
+
+### 自检
+
+- **没想到**: Coverage 审计发现 `CreateSession`/`CloseSession` 完全未覆盖——这两个函数仅被 WebSocket handler 调用，而 handler 层无测试。补了 3 个简单的 store 层测试即可填补
+- **疏漏**: `api_test.go` 的局部类型定义本可以跳过——直接解码为 `map[string]any` 或 `[]Task` 即可，无需定义结构体。但当前方案最小化改动，测试语义不变
+- **改进**: 下一轮可以给 agent handler 层添加 WebSocket 测试（`agent_test.go`），当前 0% 覆盖率
+
+### 📋 Todolist
+
+- [x] Round 14: 死代码清理 + 文档更新 + Session 测试
+- [ ] agent handler 层 WebSocket 测试（覆盖率 0%）
+- [ ] 延期: admin 密码 / 静态 Token
+
 ## 2026-07-09 Round 13 — 深度审查 + 协作者 45fe65f 验收
 
 ### 新发现：协作者提交 45fe65f

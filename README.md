@@ -64,6 +64,7 @@ flowchart LR
 - Group command execution
 - Task result tracking
 - Audit log
+- AI Ops intelligent analysis (health scores, threshold alerts, group summaries)
 - Docker-based multi-device demo
 
 ## Useful Commands

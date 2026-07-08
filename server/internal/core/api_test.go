@@ -9,6 +9,12 @@ import (
 	"testing"
 )
 
+// createTaskResponse is the JSON response shape returned by handleCreateTask.
+// Defined locally in tests; the production handler uses map[string]any.
+type createTaskResponse struct {
+	Tasks []Task `json:"tasks"`
+}
+
 func TestHandleHealth(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
