@@ -1,10 +1,11 @@
-import { Button, Card, Progress, Table, Typography } from 'antd';
+import { App, Button, Card, Progress, Table, Typography } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import { labopsApi } from '@/api/labops';
 import { useLoadable } from '@/hooks/useLoadable';
 
 export default function GroupsPage() {
-  const { data: groups, loading, reload } = useLoadable(() => labopsApi.groups(), { intervalMs: 10000 });
+  const { message } = App.useApp();
+  const { data: groups, loading, reload } = useLoadable(() => labopsApi.groups(), { intervalMs: 10000, onError: () => message.error('加载分组数据失败') });
 
   return (
     <div className="page">

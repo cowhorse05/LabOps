@@ -39,7 +39,7 @@ export default function TasksPage() {
     }
   }
 
-return (
+  return (
     <div className="page">
       <div className="page-head">
         <div>

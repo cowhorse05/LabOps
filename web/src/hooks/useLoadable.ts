@@ -30,7 +30,9 @@ export function useLoadable<T>(
       setData(result);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err : new Error(String(err)));
+      const error = err instanceof Error ? err : new Error(String(err));
+      setError(error);
+      options.onError?.(error);
       if (options.errorMessage) {
         // We don't import App.useApp here to keep the hook generic.
         // Pages can handle error display via the error state.
@@ -39,7 +41,7 @@ export function useLoadable<T>(
     } finally {
       setLoading(false);
     }
-  }, [fetcher, options.errorMessage]);
+  }, [fetcher, options.errorMessage, options.onError]);
 
   useEffect(() => {
     load();

@@ -38,7 +38,7 @@ export default function DeviceDetailPage() {
     }
   }
 
-return (
+  return (
     <div className="page">
       <div className="page-head">
         <div>

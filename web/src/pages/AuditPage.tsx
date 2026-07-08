@@ -1,4 +1,4 @@
-import { Button, Card, Table, Tag, Typography } from 'antd';
+import { App, Button, Card, Table, Tag, Typography } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { labopsApi } from '@/api/labops';
@@ -6,7 +6,8 @@ import { useLoadable } from '@/hooks/useLoadable';
 import { statusColor, statusText } from '@/utils/status';
 
 export default function AuditPage() {
-  const { data: logs, loading, reload } = useLoadable(() => labopsApi.auditLogs(), { intervalMs: 15000 });
+  const { message } = App.useApp();
+  const { data: logs, loading, reload } = useLoadable(() => labopsApi.auditLogs(), { intervalMs: 15000, onError: () => message.error('加载审计日志失败') });
 
   return (
     <div className="page">

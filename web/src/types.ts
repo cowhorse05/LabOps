@@ -20,7 +20,7 @@ export interface Device {
   cpuUsage: number;
   memoryUsage: number;
   diskUsage: number;
-  status: 'online' | 'offline' | string;
+  status: 'online' | 'offline';
   lastSeen: string;
   createdAt: string;
   updatedAt: string;
@@ -54,7 +54,7 @@ export interface Task {
   deviceName: string;
   groupName: string;
   command: string;
-  status: 'pending' | 'running' | 'success' | 'failed' | 'timeout' | string;
+  status: 'pending' | 'running' | 'success' | 'failed' | 'timeout';
   requestedBy: string;
   createdAt: string;
   startedAt?: string;

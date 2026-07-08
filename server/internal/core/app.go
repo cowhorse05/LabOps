@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -99,9 +100,13 @@ func (a *App) withAuth(next http.Handler) http.Handler {
 
 func (a *App) refreshState(ctx context.Context) {
 	cutoff := time.Now().UTC().Add(-a.config.HeartbeatTimeout).Format(time.RFC3339)
-	_ = a.store.ExpireDevices(ctx, cutoff)
+	if err := a.store.ExpireDevices(ctx, cutoff); err != nil {
+		log.Printf("expire devices error: %v", err)
+	}
 	taskCutoff := time.Now().UTC().Add(-a.config.TaskTimeout).Format(time.RFC3339)
-	_ = a.store.TimeoutTasks(ctx, taskCutoff)
+	if err := a.store.TimeoutTasks(ctx, taskCutoff); err != nil {
+		log.Printf("timeout tasks error: %v", err)
+	}
 }
 
 func (a *App) maintenanceLoop() {

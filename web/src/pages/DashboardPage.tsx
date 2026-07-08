@@ -1,4 +1,4 @@
-import { Button, Card, Col, Progress, Row, Skeleton, Space, Statistic, Table, Tag, Typography } from 'antd';
+import { App, Button, Card, Col, Progress, Row, Skeleton, Space, Statistic, Table, Tag, Typography } from 'antd';
 import { ArrowRightOutlined, DesktopOutlined, PlayCircleOutlined, ProfileOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -8,10 +8,11 @@ import { useLoadableAll } from '@/hooks/useLoadable';
 
 export default function DashboardPage() {
   const navigate = useNavigate();
+  const { message } = App.useApp();
 
   const { data, loading, reload } = useLoadableAll(
     [labopsApi.stats, labopsApi.devices, labopsApi.tasks, labopsApi.groups, labopsApi.auditLogs],
-    { intervalMs: 10000 },
+    { intervalMs: 10000, onError: () => message.error('加载仪表盘数据失败') },
   );
 
   const stats = data?.[0] ?? { total: 0, online: 0, offline: 0 };

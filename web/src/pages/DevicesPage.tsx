@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Button, Card, Input, Progress, Space, Table, Tag, Typography } from 'antd';
+import { App, Button, Card, Input, Progress, Space, Table, Tag, Typography } from 'antd';
 import { EyeOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -10,7 +10,8 @@ import { statusColor, statusText } from '@/utils/status';
 export default function DevicesPage() {
   const navigate = useNavigate();
   const [keyword, setKeyword] = useState('');
-  const { data: devices, loading, reload } = useLoadable(() => labopsApi.devices(), { intervalMs: 10000 });
+  const { message } = App.useApp();
+  const { data: devices, loading, reload } = useLoadable(() => labopsApi.devices(), { intervalMs: 10000, onError: () => message.error('加载设备列表失败') });
 
   const filtered = useMemo(() => {
     const k = keyword.trim().toLowerCase();
