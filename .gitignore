@@ -42,3 +42,7 @@ yarn-error.log*
 
 # Local config
 mysql-config.txt
+
+# Coverage output
+server/coverage
+server/coverage.out
