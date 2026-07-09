@@ -76,7 +76,23 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleMe(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, a.store.AdminUser())
+	// Extract username from JWT in Authorization header
+	username := a.extractUsername(r)
+	if username == "" {
+		// Fallback to static token / backward compat
+		writeJSON(w, http.StatusOK, a.store.AdminUser())
+		return
+	}
+	user, ok, err := a.store.FindUserByUsername(r.Context(), username)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !ok {
+		writeError(w, http.StatusNotFound, "user not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, user)
 }
 
 func (a *App) handleChangePassword(w http.ResponseWriter, r *http.Request) {
@@ -98,9 +114,10 @@ func (a *App) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 
 	// Allow static token for backward compat (use admin user)
-	var username string
+	var username, userID string
 	if tokenString == a.config.WebToken {
 		username = "admin"
+		userID = "user_admin"
 	} else {
 		token, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
 			return []byte(a.config.JWTSecret), nil
@@ -115,6 +132,13 @@ func (a *App) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		username, _ = claims["username"].(string)
+		userID, _ = claims["sub"].(string)
+		}
+
+	// Prevent password reuse
+	if req.NewPassword == req.OldPassword {
+		writeError(w, http.StatusBadRequest, "new password must differ from current password")
+		return
 	}
 
 	// Verify old password
@@ -134,14 +158,14 @@ func (a *App) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Issue new JWT
-	claims := jwt.MapClaims{
-		"sub":      username,
+	// Issue new JWT — keep same userID and username as original token
+	newClaims := jwt.MapClaims{
+		"sub":      userID,
 		"username": username,
 		"iat":      time.Now().Unix(),
 		"exp":      time.Now().Add(24 * time.Hour).Unix(),
 	}
-	newToken := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	newToken := jwt.NewWithClaims(jwt.SigningMethodHS256, newClaims)
 	newTokenString, err := newToken.SignedString([]byte(a.config.JWTSecret))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to generate token")
@@ -354,6 +378,31 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
+}
+
+// extractUsername returns the username from the JWT in the Authorization header.
+// Returns empty string if token is missing, invalid, or is the static WebToken.
+func (a *App) extractUsername(r *http.Request) string {
+	authHeader := r.Header.Get("Authorization")
+	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+	if tokenString == "" || tokenString == a.config.WebToken {
+		return ""
+	}
+	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return []byte(a.config.JWTSecret), nil
+	})
+	if err != nil || !token.Valid {
+		return ""
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return ""
+	}
+	username, _ := claims["username"].(string)
+	return username
 }
 
 func auditMessage(command string) string {

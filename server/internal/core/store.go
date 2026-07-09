@@ -163,6 +163,21 @@ func (s *Store) FindUser(ctx context.Context, username, password string) (User, 
 	return user, true, nil
 }
 
+func (s *Store) FindUserByUsername(ctx context.Context, username string) (User, bool, error) {
+	var roles string
+	var user User
+	err := s.db.QueryRowContext(ctx, `SELECT id, username, display_name, roles FROM users WHERE username = ?`, username).
+		Scan(&user.ID, &user.Username, &user.DisplayName, &roles)
+	if errors.Is(err, sql.ErrNoRows) {
+		return User{}, false, nil
+	}
+	if err != nil {
+		return User{}, false, err
+	}
+	user.Roles = splitRoles(roles)
+	return user, true, nil
+}
+
 func (s *Store) AdminUser() User {
 	return User{ID: "user_admin", Username: "admin", DisplayName: "LabOps Admin", Roles: []string{"admin", "operator"}}
 }

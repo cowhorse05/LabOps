@@ -178,6 +178,20 @@ func (a *App) withAuth(next http.Handler) http.Handler {
 			return
 		}
 
+		// Server-side enforcement: users with must_change_password can only access
+		// the password-change and /auth/me endpoints. This closes the gap where
+		// the frontend localStorage flag was the only gatekeeper.
+		if claims, ok := token.Claims.(jwt.MapClaims); ok {
+			if username, _ := claims["username"].(string); username != "" {
+				if r.URL.Path != "/api/auth/change-password" && r.URL.Path != "/api/auth/me" {
+					if a.store.MustChangePassword(r.Context(), username) {
+						writeError(w, http.StatusForbidden, "password change required")
+						return
+					}
+				}
+			}
+		}
+
 		next.ServeHTTP(w, r)
 	})
 }

@@ -12,6 +12,7 @@ interface AuthState {
 
 const tokenKey = 'labops.token';
 const userKey = 'labops.user';
+const mustChangePwdKey = 'labops.mustChangePassword';
 
 function readUser() {
   const raw = localStorage.getItem(userKey);
@@ -23,13 +24,18 @@ function readUser() {
   }
 }
 
+function readMustChangePwd(): boolean {
+  return localStorage.getItem(mustChangePwdKey) === 'true';
+}
+
 export const useAuthStore = create<AuthState>((set) => ({
   token: localStorage.getItem(tokenKey),
   user: readUser(),
-  mustChangePassword: false,
+  mustChangePassword: readMustChangePwd(),
   setAuth: (token, user, mustChangePassword = false) => {
     localStorage.setItem(tokenKey, token);
     localStorage.setItem(userKey, JSON.stringify(user));
+    localStorage.setItem(mustChangePwdKey, String(mustChangePassword));
     set({ token, user, mustChangePassword });
   },
   setUser: (user) => {
@@ -39,6 +45,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   clear: () => {
     localStorage.removeItem(tokenKey);
     localStorage.removeItem(userKey);
+    localStorage.removeItem(mustChangePwdKey);
     set({ token: null, user: null, mustChangePassword: false });
   },
 }));

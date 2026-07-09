@@ -41,12 +41,15 @@ LabOps is a lightweight, open-source operations console built for students, clas
 
 ### Prerequisites
 
-- Windows 10/11 + PowerShell
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Podman)
-- [Node.js](https://nodejs.org/) 20+ (for local web development)
-- Go 1.23+ (optional — Go builds and tests can run inside Docker)
+| Platform | Requirements |
+|----------|-------------|
+| **Windows** | PowerShell 5+, Docker Desktop or Podman |
+| **Linux** | bash, Docker Engine or Podman |
+| **Both** | Node.js 20+ (for local dev), Go 1.23+ (optional — builds run inside Docker) |
 
 ### 3-Step Getting Started
+
+**Windows (PowerShell):**
 
 ```powershell
 # 1. Clone the repository
@@ -54,19 +57,32 @@ git clone https://github.com/cowhorse05/LabOps.git
 cd LabOps
 
 # 2. Launch the full demo stack
-.\scripts\dev.ps1
+.\scripts\dev.ps1        # Docker Desktop
+# or for Podman:
+# .\scripts\dev.ps1      # (auto-detected if podman-compose is installed)
 
-# 3. Open your browser
-# → http://localhost:5173
+# 3. Open your browser → http://localhost:5173
 ```
 
-The first build takes 2-3 minutes as Docker pulls and builds images. Once ready, the compose environment starts the server, web console, and 4 simulated agents.
+**Linux / macOS (bash):**
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/cowhorse05/LabOps.git
+cd LabOps
+
+# 2. Launch the full demo stack
+./scripts/dev.sh         # auto-detects docker or podman
+
+# 3. Open your browser → http://localhost:5173
+```
+
+The first build takes 2-3 minutes as container images are pulled and built. Once ready, the compose environment starts the server, web console, and 4 simulated agents.
 
 ### Stop the Stack
 
-```powershell
-.\scripts\compose-down.ps1
-```
+**Windows:** `.\scripts\compose-down.ps1`
+**Linux:** `./scripts/compose-down.sh`
 
 ### Demo Credentials
 
@@ -75,13 +91,87 @@ Username: admin
 Password: admin
 ```
 
-> The default credentials use bcrypt hashing at rest. For production use, change the admin password and rotate the agent/web tokens via environment variables.
+> On first login you will be prompted to change the password. The default credentials use bcrypt hashing at rest. For production use, change the admin password and rotate the agent/web tokens via environment variables.
 
 ### Run Verification Checks
 
 ```powershell
 .\scripts\test.ps1
 ```
+
+---
+
+## Production Deployment
+
+### Option 1: Container Compose (cross-platform)
+
+The same `compose.yaml` used for development works for production — just customize your tokens in `.env` first:
+
+```bash
+# Copy and edit environment variables
+cp .env.example .env
+# Edit .env to change LABOPS_AGENT_TOKEN and LABOPS_WEB_TOKEN
+
+# Deploy (auto-detects docker or podman)
+./scripts/deploy.sh --mode compose     # Linux
+.\scripts\deploy.ps1 -Mode compose     # Windows
+```
+
+### Option 2: Native Deployment (Linux)
+
+For bare-metal Linux servers without Docker:
+
+```bash
+# Auto-install dependencies and deploy with systemd
+sudo ./scripts/deploy.sh --mode native --install-deps
+
+# Start services
+sudo systemctl start labops-server
+sudo systemctl start labops-agent@my-workstation
+
+# Web UI: http://YOUR-SERVER:8080
+# Serve the React frontend with nginx or Caddy pointing to web/dist/
+```
+
+What this does:
+1. Installs Go and Node.js via your package manager
+2. Compiles the server and agent into static binaries (`CGO_ENABLED=0`)
+3. Builds the React frontend into `web/dist/`
+4. Creates a `labops` system user, data directory at `/var/lib/labops`
+5. Installs systemd unit files for the server and agent template
+
+**Customization:**
+
+| File | Purpose |
+|------|---------|
+| `/etc/labops/env` | Server environment variables (tokens, DB path) |
+| `/etc/systemd/system/labops-server.service` | Server systemd unit |
+| `/etc/systemd/system/labops-agent@.service` | Agent template unit |
+
+### Option 3: Native Deployment (Windows)
+
+```powershell
+# Build binaries + web frontend
+.\scripts\deploy.ps1 -Mode native -InstallDeps
+
+# Run directly
+& "$env:ProgramFiles\LabOps\labops-server.exe"
+& "$env:ProgramFiles\LabOps\labops-agent.exe" --server=http://localhost:8080 --token=<token> --id=my-pc --name=my-pc
+```
+
+For production Windows services, install [NSSM](https://nssm.cc/) and wrap the server/agent executables.
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LABOPS_ADDR` | `:8080` | Server listen address |
+| `LABOPS_DB_PATH` | `data/labops.db` | SQLite database path |
+| `LABOPS_AGENT_TOKEN` | `dev-agent-token` | Token agents use to connect via WebSocket |
+| `LABOPS_WEB_TOKEN` | `dev-token` | Static bearer token for API access |
+| `LABOPS_HEARTBEAT_TIMEOUT` | `35s` | Mark device offline after this duration |
+| `LABOPS_TASK_TIMEOUT` | `2m` | Timeout running tasks |
+| `VITE_PROXY_TARGET` | `http://localhost:8080` | Vite dev server API proxy target |
 
 ---
 
