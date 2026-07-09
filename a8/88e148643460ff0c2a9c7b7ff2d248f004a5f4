@@ -1,0 +1,70 @@
+server/internal/core/store_device_test.go
+  s_10871cc910d331::t_41d2bc2a71fc8e 1-52
+web/src/pages/DevicesPage.tsx
+  s_10871cc910d331::t_0d3615f677b043 141-180
+  s_10871cc910d331::t_dcc63074cf8a6a 28-57
+  s_10871cc910d331::t_c533a75cc8c84e 15-20
+  s_10871cc910d331::t_8bb2ed589e3564 120-135
+  s_10871cc910d331::t_bb1c2c4a1d398e 2-3
+  s_10871cc910d331::t_c9679268b65532 63,66-68
+server/internal/core/agent_test.go
+  s_493c58d50e63f0::t_ccdde243aac144 343-359,373-374
+  s_493c58d50e63f0::t_9572c727f0cdd7 422-423,428-429,431,433-435
+server/internal/core/store.go
+  s_493c58d50e63f0::t_9cb9d75360fddd 431,434-439
+  s_10871cc910d331::t_142352a88bd245 209-239
+agent/cmd/agent/main_test.go
+  s_10871cc910d331::t_7826b36d18e194 238-264
+server/internal/core/api.go
+  s_10871cc910d331::t_7766f86ec68b1e 35-46
+  s_10871cc910d331::t_b000be6660fb9b 235-323
+agent/cmd/agent/main.go
+  s_10871cc910d331::t_44a273ca15c8a9 418,424
+  s_10871cc910d331::t_5ff1aaf4ded441 523-527
+  s_10871cc910d331::t_05bf916d5e4bfb 13
+  s_10871cc910d331::t_11e4cb374085e8 381-417,419-420,427-488
+  s_10871cc910d331::t_3bf21542f8a298 24-27
+  s_10871cc910d331::t_465f7cd2d83cae 40
+  s_10871cc910d331::t_1c2efdfdfd50b9 28
+  s_10871cc910d331::t_dcb1b3227e7d96 313-315
+  s_10871cc910d331::t_3cedfec0a27364 114-115,120
+  s_10871cc910d331::t_4e3baf8ce63d36 421
+  s_10871cc910d331::t_e068bff14958d2 422-423,425-426
+  s_10871cc910d331::t_5278f4aea78c58 152-157
+  s_10871cc910d331::t_c3d2be6ca1215e 215,223
+server/internal/core/llm.go
+  s_493c58d50e63f0::t_f271306e43ccff 483-485
+  s_493c58d50e63f0::t_3656e2ad05a0e2 532-537
+server/internal/core/agent.go
+  s_493c58d50e63f0::t_f0010204f26378 210-211,216-217,219
+server/internal/core/app.go
+  s_10871cc910d331::t_48e9084fc3e66c 117-118
+web/src/api/labops.ts
+  s_10871cc910d331::t_88702b78bda4da 32-48
+web/src/pages/AiOpsPage.tsx
+  s_10871cc910d331::t_3ff71e41497e34 235
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.33-trip",
+  "base_commit_sha": "a888e148643460ff0c2a9c7b7ff2d248f004a5f4",
+  "prompts": {},
+  "sessions": {
+    "s_10871cc910d331": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0458fde5-9a83-4d27-b29c-37909c1d4fdb",
+        "model": "deepseek-v4-pro"
+      },
+      "human_author": "Yufeng Li （李裕峰） <li.yufeng@trip.com>"
+    },
+    "s_493c58d50e63f0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "928fcff4-6331-4aa3-a55c-ec851496b121",
+        "model": "deepseek-v4-pro"
+      },
+      "human_author": "Yufeng Li （李裕峰） <li.yufeng@trip.com>"
+    }
+  }
+}
