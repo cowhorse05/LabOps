@@ -1,16 +1,35 @@
 services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: labops
+      MYSQL_DATABASE: labops
+      MYSQL_USER: labops
+      MYSQL_PASSWORD: labops
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   server:
     build:
       context: ./server
     environment:
       LABOPS_ADDR: ":8080"
-      LABOPS_DB_PATH: /data/labops.db
+      LABOPS_DB_DRIVER: mysql
+      LABOPS_MYSQL_DSN: labops:labops@tcp(mysql:3306)/labops?parseTime=true&charset=utf8mb4
       LABOPS_AGENT_TOKEN: dev-agent-token
       LABOPS_WEB_TOKEN: dev-token
     ports:
       - "8080:8080"
-    volumes:
-      - labops-data:/data
+    depends_on:
+      mysql:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/health"]
       interval: 10s
@@ -86,3 +105,4 @@ services:
 
 volumes:
   labops-data:
+  mysql-data:

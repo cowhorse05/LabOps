@@ -8,6 +8,7 @@ interface AuthState {
   setAuth: (token: string, user: User, mustChangePassword?: boolean) => void;
   clear: () => void;
   setUser: (user: User) => void;
+  updateToken: (token: string) => void;
 }
 
 const tokenKey = 'labops.token';
@@ -47,5 +48,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     localStorage.removeItem(userKey);
     localStorage.removeItem(mustChangePwdKey);
     set({ token: null, user: null, mustChangePassword: false });
+  },
+  updateToken: (token) => {
+    localStorage.setItem(tokenKey, token);
+    set({ token });
   },
 }));

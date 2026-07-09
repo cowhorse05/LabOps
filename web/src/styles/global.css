@@ -122,6 +122,15 @@ body {
   background: #f8fafc;
 }
 
+.user-chip.clickable {
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.user-chip.clickable:hover {
+  background: #e2e8f0;
+  border-color: #94a3b8;
+}
+
 .login-page {
   min-height: 100vh;
   display: grid;

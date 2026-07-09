@@ -7,7 +7,7 @@ import (
 
 func mustOpenStore(t *testing.T) *Store {
 	t.Helper()
-	store, err := OpenStore(":memory:")
+	store, err := OpenStore(DriverSQLite, ":memory:")
 	if err != nil {
 		t.Fatalf("OpenStore(:memory:) failed: %v", err)
 	}

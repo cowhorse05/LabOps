@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { AuditLog, Device, DeviceGroup, DeviceStats, Task, User } from '@/types';
+import type { AiOpsLLMConfig, AuditLog, Device, DeviceGroup, DeviceStats, LLMRecommendation, Task, User } from '@/types';
 
 export const authApi = {
   async login(username: string, password: string) {
@@ -51,6 +51,26 @@ export const labopsApi = {
   },
   async auditLogs() {
     const { data } = await api.get<AuditLog[]>('/audit-logs');
+    return data;
+  },
+  async llmConfig() {
+    const { data } = await api.get<AiOpsLLMConfig>('/aiops/llm-config');
+    return data;
+  },
+  async saveLLMConfig(input: { providerUrl: string; apiKey: string; model: string; providerType: string; enabled: boolean; autoExecuteReadOnly?: boolean }) {
+    const { data } = await api.put<{ status: string }>('/aiops/llm-config', input);
+    return data;
+  },
+  async executeRecommendation(input: { recommendationId?: string; recommendationIds?: string[] }) {
+    const { data } = await api.post<{ tasks: Task[]; errors?: string[] }>('/aiops/recommendations/execute', input);
+    return data;
+  },
+  async autoModeConfig() {
+    const { data } = await api.get<{ autoExecuteReadOnly: boolean }>('/aiops/auto-mode');
+    return data;
+  },
+  async saveAutoMode(autoExecuteReadOnly: boolean) {
+    const { data } = await api.put<{ status: string }>('/aiops/auto-mode', { autoExecuteReadOnly });
     return data;
   },
 };

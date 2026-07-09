@@ -130,3 +130,29 @@ type CommandPayload struct {
 func nowString() string {
 	return time.Now().UTC().Format(time.RFC3339)
 }
+
+// LLMConfig holds the configuration for the LLM-powered AI Ops analysis.
+type LLMConfig struct {
+	ProviderURL         string `json:"providerUrl"`
+	APIKey              string `json:"apiKey"`
+	Model               string `json:"model"`
+	ProviderType        string `json:"providerType"` // "openai" or "anthropic"
+	Enabled             bool   `json:"enabled"`
+	AutoExecuteReadOnly bool   `json:"autoExecuteReadOnly"`
+	UpdatedAt           string `json:"updatedAt"`
+}
+
+// LLMRecommendation is a structured, executable recommendation from the LLM.
+type LLMRecommendation struct {
+	ID         string `json:"id"`         // rec_xxx
+	DeviceID   string `json:"deviceId"`
+	DeviceName string `json:"deviceName"`
+	GroupName  string `json:"groupName"`
+	Command    string `json:"command"`    // shell command to execute
+	Reason     string `json:"reason"`     // human-readable explanation
+	Priority   string `json:"priority"`   // "high", "medium", or "low"
+	IsMutation bool   `json:"isMutation"` // true if command modifies system state
+	Status     string `json:"status"`     // "pending", "executed", "error"
+	TaskID     string `json:"taskId,omitempty"`
+	CreatedAt  string `json:"createdAt"`
+}

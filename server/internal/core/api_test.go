@@ -18,7 +18,7 @@ type createTaskResponse struct {
 func TestHandleHealth(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, _ := OpenStore(":memory:")
+	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
 	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
@@ -43,7 +43,7 @@ func TestHandleHealth(t *testing.T) {
 func TestHandleLogin_Valid(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, _ := OpenStore(":memory:")
+	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
 	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
@@ -75,7 +75,7 @@ func TestHandleLogin_Valid(t *testing.T) {
 func TestHandleLogin_Invalid(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, _ := OpenStore(":memory:")
+	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
 	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
@@ -104,7 +104,7 @@ func TestHandleLogin_Invalid(t *testing.T) {
 func TestHandleMe(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, _ := OpenStore(":memory:")
+	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
 	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
@@ -132,7 +132,7 @@ func TestHandleMe(t *testing.T) {
 func TestHandleStats_Empty(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, _ := OpenStore(":memory:")
+	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
 	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
@@ -163,7 +163,7 @@ func TestHandleStats_Empty(t *testing.T) {
 func TestHandleDevices_Empty(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, _ := OpenStore(":memory:")
+	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
 	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
@@ -188,7 +188,7 @@ func TestHandleDevices_Empty(t *testing.T) {
 func TestHandleDevices_WithData(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, _ := OpenStore(":memory:")
+	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
 
@@ -241,7 +241,7 @@ func TestHandleDevices_WithData(t *testing.T) {
 func TestHandleGetDevice_NotFound(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, _ := OpenStore(":memory:")
+	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
 	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
@@ -266,7 +266,7 @@ func TestHandleGetDevice_NotFound(t *testing.T) {
 func TestHandleGroups(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, _ := OpenStore(":memory:")
+	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
 
@@ -338,7 +338,7 @@ func TestHandleGroups(t *testing.T) {
 func TestHandleCreateTask_SingleDevice(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, _ := OpenStore(":memory:")
+	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
 
@@ -397,7 +397,7 @@ func TestHandleCreateTask_SingleDevice(t *testing.T) {
 func TestHandleCreateTask_MissingCommand(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, _ := OpenStore(":memory:")
+	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
 	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
@@ -426,7 +426,7 @@ func TestHandleCreateTask_MissingCommand(t *testing.T) {
 func TestHandleCreateTask_MissingTarget(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, _ := OpenStore(":memory:")
+	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
 	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
@@ -455,7 +455,7 @@ func TestHandleCreateTask_MissingTarget(t *testing.T) {
 func TestHandleCreateTask_DeviceNotFound(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, _ := OpenStore(":memory:")
+	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
 	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
@@ -484,7 +484,7 @@ func TestHandleCreateTask_DeviceNotFound(t *testing.T) {
 func TestHandleTasks_Empty(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, _ := OpenStore(":memory:")
+	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
 	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
@@ -509,7 +509,7 @@ func TestHandleTasks_Empty(t *testing.T) {
 func TestHandleAudit_Empty(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, _ := OpenStore(":memory:")
+	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
 	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
@@ -534,7 +534,7 @@ func TestHandleAudit_Empty(t *testing.T) {
 func TestWithAuth_NoToken(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, _ := OpenStore(":memory:")
+	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
 	app := NewApp(store, Config{WebToken: "secret-token", AgentToken: ""})
@@ -552,7 +552,7 @@ func TestWithAuth_NoToken(t *testing.T) {
 func TestWithAuth_ValidToken(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, _ := OpenStore(":memory:")
+	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
 	app := NewApp(store, Config{WebToken: "secret-token", AgentToken: ""})
@@ -571,7 +571,7 @@ func TestWithAuth_ValidToken(t *testing.T) {
 func TestWithAuth_InvalidToken(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, _ := OpenStore(":memory:")
+	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
 	app := NewApp(store, Config{WebToken: "secret-token", AgentToken: ""})
@@ -590,7 +590,7 @@ func TestWithAuth_InvalidToken(t *testing.T) {
 func TestWithAuth_SkipPaths(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, _ := OpenStore(":memory:")
+	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
 	app := NewApp(store, Config{WebToken: "secret-token", AgentToken: ""})
@@ -619,7 +619,7 @@ func TestWithAuth_SkipPaths(t *testing.T) {
 func TestHandleGetDevice_Found(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, _ := OpenStore(":memory:")
+	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
 
@@ -672,7 +672,7 @@ func TestHandleGetDevice_Found(t *testing.T) {
 func TestHandleCreateTask_ByGroup(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, _ := OpenStore(":memory:")
+	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
 
@@ -736,7 +736,7 @@ func TestHandleCreateTask_ByGroup(t *testing.T) {
 func TestHandleCreateTask_InvalidJSON(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, _ := OpenStore(":memory:")
+	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
 	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
@@ -761,7 +761,7 @@ func TestHandleCreateTask_InvalidJSON(t *testing.T) {
 func TestHandleGetTask_Found(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, _ := OpenStore(":memory:")
+	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
 
@@ -831,7 +831,7 @@ func TestHandleGetTask_Found(t *testing.T) {
 func TestHandleGetTask_NotFound(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, _ := OpenStore(":memory:")
+	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
 	app := NewApp(store, Config{WebToken: "", AgentToken: ""})

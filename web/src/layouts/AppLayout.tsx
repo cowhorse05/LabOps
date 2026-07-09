@@ -1,18 +1,20 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Avatar, Button, Layout, Menu, Space, Tag, Typography, App } from 'antd';
+import { Avatar, Button, Dropdown, Layout, Menu, Space, Tag, Typography, App } from 'antd';
 import {
   AuditOutlined,
   ClusterOutlined,
   RobotOutlined,
   DashboardOutlined,
   DesktopOutlined,
+  KeyOutlined,
   LogoutOutlined,
   ProfileOutlined,
   ReloadOutlined,
 } from '@ant-design/icons';
 import { authApi } from '@/api/labops';
 import { useAuthStore } from '@/stores/auth';
+import ChangePasswordModal from '@/components/ChangePasswordModal';
 
 const { Header, Sider, Content } = Layout;
 
@@ -45,6 +47,12 @@ export default function AppLayout() {
   }, [clear, message, navigate, setUser]);
 
   const activeKey = navItems.find((item) => location.pathname.startsWith(item.key))?.key || '/dashboard';
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+
+  const userMenuItems = [
+    { key: 'change-password', icon: <KeyOutlined />, label: '修改密码' },
+    { key: 'logout', icon: <LogoutOutlined />, label: '退出登录' },
+  ];
 
   return (
     <Layout className="shell">
@@ -77,25 +85,35 @@ export default function AppLayout() {
             <Button icon={<ReloadOutlined />} onClick={() => window.location.reload()}>
               刷新
             </Button>
-            <Space size={10} className="user-chip">
-              <Avatar size={30}>{user?.displayName?.[0] || 'A'}</Avatar>
-              <span>{user?.displayName || 'LabOps Admin'}</span>
-            </Space>
-            <Button
-              icon={<LogoutOutlined />}
-              onClick={() => {
-                clear();
-                navigate('/login', { replace: true });
+            <Dropdown
+              menu={{
+                items: userMenuItems,
+                onClick: ({ key }) => {
+                  if (key === 'change-password') {
+                    setChangePasswordOpen(true);
+                  } else if (key === 'logout') {
+                    clear();
+                    navigate('/login', { replace: true });
+                  }
+                },
               }}
+              trigger={['click']}
             >
-              退出
-            </Button>
+              <Space size={10} className="user-chip clickable">
+                <Avatar size={30}>{user?.displayName?.[0] || 'A'}</Avatar>
+                <span>{user?.displayName || 'LabOps Admin'}</span>
+              </Space>
+            </Dropdown>
           </Space>
         </Header>
         <Content className="shell-content">
           <Outlet />
         </Content>
       </Layout>
+      <ChangePasswordModal
+        open={changePasswordOpen}
+        onClose={() => setChangePasswordOpen(false)}
+      />
     </Layout>
   );
 }

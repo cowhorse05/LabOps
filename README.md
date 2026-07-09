@@ -10,6 +10,10 @@
 
 ---
 
+[**中文文档**](#中文文档-chinese-documentation) | [**English Documentation**](#overview)
+
+---
+
 ## Overview
 
 LabOps is a lightweight, open-source operations console built for students, classroom labs, homelab enthusiasts, and small IT teams. It provides a real agent-server-web loop — agents report inventory and heartbeat data, receive commands, return results, and leave a full audit trail — all from a single Docker Compose command on one machine.
@@ -161,12 +165,42 @@ What this does:
 
 For production Windows services, install [NSSM](https://nssm.cc/) and wrap the server/agent executables.
 
+### Database Configuration
+
+LabOps supports **SQLite** (default) and **MySQL 8.0+** databases.
+
+#### SQLite (Default)
+
+No configuration required. The database file is created automatically at the path specified by `LABOPS_DB_PATH`.
+
+#### MySQL
+
+To use MySQL instead of SQLite, set these environment variables before starting the server:
+
+```env
+LABOPS_DB_DRIVER=mysql
+LABOPS_MYSQL_DSN=root:password@tcp(127.0.0.1:3306)/labops?parseTime=true&charset=utf8mb4
+```
+
+**Prerequisites:**
+- MySQL 8.0+ must be installed and running
+- The target database will be created automatically on first startup (requires `CREATE DATABASE` privilege)
+- The user specified in the DSN needs `CREATE TABLE`, `INSERT`, `UPDATE`, `DELETE`, `SELECT` privileges
+
+**Non-standard port example (Windows MySQL on port 3307):**
+
+```env
+LABOPS_MYSQL_DSN=root:123456@tcp(127.0.0.1:3307)/labops?parseTime=true&charset=utf8mb4
+```
+
 ### Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `LABOPS_ADDR` | `:8080` | Server listen address |
-| `LABOPS_DB_PATH` | `data/labops.db` | SQLite database path |
+| `LABOPS_DB_DRIVER` | `sqlite` | Database driver: `sqlite` or `mysql` |
+| `LABOPS_DB_PATH` | `data/labops.db` | SQLite database file path |
+| `LABOPS_MYSQL_DSN` | `labops:labops@tcp(127.0.0.1:3306)/labops?...` | MySQL Data Source Name |
 | `LABOPS_AGENT_TOKEN` | `dev-agent-token` | Token agents use to connect via WebSocket |
 | `LABOPS_WEB_TOKEN` | `dev-token` | Static bearer token for API access |
 | `LABOPS_HEARTBEAT_TIMEOUT` | `35s` | Mark device offline after this duration |
@@ -184,7 +218,7 @@ flowchart LR
     Agent2["Agent<br/>lab-pc-02 (Ubuntu)"] -->|WebSocket| Server
     Agent3["Agent<br/>lab-server-01 (Server)"] -->|WebSocket| Server
     Agent4["Agent<br/>edge-node-01 (Edge)"] -->|WebSocket| Server
-    Server --> SQLite[("SQLite")]
+    Server --> DB[("SQLite / MySQL")]
     Server -->|command task| Agent1
     Agent1 -->|stdout / stderr / exit code| Server
 ```
@@ -200,7 +234,7 @@ flowchart LR
    │                      │  CreateAudit           │
                           │
                           ▼
-                      SQLite
+                   SQLite / MySQL
 ```
 
 ### WebSocket Protocol
@@ -325,6 +359,165 @@ LabOps/
 - [Research](docs/research.md) — Competitive analysis of MeshCentral, Tactical RMM, Fleet, Zabbix/Netdata
 - [Roadmap](docs/roadmap.md) — Version roadmap and planned features
 - [File Distribution Spec](docs/features/file-distribution/design.md) — v0.3 design document for file push capabilities
+
+---
+
+## 中文文档 (Chinese Documentation)
+
+### 项目概述
+
+LabOps 是一个轻量级开源运维平台，面向课堂实验室、家庭实验室爱好者和中小型 IT 团队。它提供了完整的 **Agent → Server → Web Console** 运维闭环 —— Agent 实时注册、心跳上报、接收命令并返回执行结果，所有操作均记录完整的审计日志。
+
+> LabOps 不是要替代成熟的 RMM 或监控平台。它是一个可读、可运行的全栈项目，以最小依赖演示真实的运维控制循环。无模拟数据、无需外部数据库 —— 只需 SQLite（或 MySQL）、Go 和 React。
+
+### 核心功能
+
+- **真实 Agent/Server/Web 循环** — Agent 注册、心跳、执行命令、上报结果，无模拟数据
+- **仪表盘** — 实时设备统计、在线率、最近任务和审计摘要，每 10 秒自动刷新
+- **设备管理** — 可搜索的设备列表，详情视图包含 CPU/内存/磁盘实时指标和心跳追踪
+- **命令执行** — 在任意设备上运行命令，捕获 stdout、stderr、退出码和执行耗时
+- **分组批量下发** — 一键向组内所有设备发送命令
+- **AI Ops 智能分析** — 健康评分（0-100），CPU/内存/磁盘/离线事件的阈值告警
+- **完整审计日志** — 每次注册、连接、命令下发和结果均被记录，可追溯
+- **Docker Compose 一键演示** — 一条命令启动服务端、Web 控制台和 4 个模拟 Agent
+- **JWT 会话认证** — bcrypt 密码哈希 + Bearer Token + 首次登录强制改密
+- **WebSocket 实时通信** — 服务端与 Agent 之间持久的双向通道
+- **双数据库支持** — SQLite（默认，零配置）和 MySQL 8.0+
+
+### 快速开始
+
+**Windows (PowerShell):**
+
+```powershell
+git clone https://github.com/cowhorse05/LabOps.git
+cd LabOps
+.\scripts\dev.ps1
+```
+
+浏览器打开 `http://localhost:5173`，使用以下账号登录：
+
+```text
+用户名: admin
+密码:   admin
+```
+
+> 首次登录后会强制要求修改密码。
+
+**Linux (bash):**
+
+```bash
+git clone https://github.com/cowhorse05/LabOps.git
+cd LabOps
+bash scripts/dev.sh
+```
+
+### 数据库配置
+
+#### 使用 MySQL（本地开发）
+
+以 Windows 本地 MySQL 8.0（端口 3307）为例：
+
+```powershell
+# 1. 创建数据库（首次需要）
+& "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe" -u root -P 3307 -p123456 -e "CREATE DATABASE IF NOT EXISTS labops CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
+# 2. 设置环境变量并启动服务端
+$env:LABOPS_DB_DRIVER = "mysql"
+$env:LABOPS_MYSQL_DSN = "root:123456@tcp(127.0.0.1:3307)/labops?parseTime=true&charset=utf8mb4"
+$env:LABOPS_ADDR = ":8080"
+$env:LABOPS_AGENT_TOKEN = "dev-agent-token"
+$env:LABOPS_WEB_TOKEN = "dev-token"
+cd server
+go run ./cmd/server/
+
+# 3. 另开终端启动前端
+cd web
+npm install
+npm run dev
+```
+
+浏览器打开 `http://localhost:5173` 即可登录。
+
+### 技术栈
+
+| 层级 | 技术 | 版本 |
+|------|------|------|
+| 前端框架 | React + TypeScript + Vite | 18 / 5.6 / 5.4 |
+| UI 组件库 | Ant Design | 5.x |
+| 状态管理 | Zustand | 4.5 |
+| HTTP 客户端 | Axios | 1.7 |
+| 路由 | react-router-dom | 6.27 |
+| 后端 | Go stdlib `net/http` | 1.25 |
+| WebSocket | gorilla/websocket | v1.5.3 |
+| 认证 | JWT (golang-jwt v5) + bcrypt | - |
+| 数据库 | SQLite / MySQL 8.0 | - |
+| Agent | Go + gorilla/websocket | 1.23 |
+
+### API 概览
+
+基础 URL: `http://localhost:8080/api`
+
+| 方法 | 路径 | 认证 | 说明 |
+|------|------|:----:|------|
+| `GET` | `/health` | - | 健康检查 |
+| `POST` | `/auth/login` | - | 登录，返回 JWT 和用户信息 |
+| `POST` | `/auth/change-password` | Bearer | 修改密码 |
+| `GET` | `/auth/me` | Bearer | 当前登录用户信息 |
+| `GET` | `/stats` | Bearer | 设备统计（总数/在线/离线） |
+| `GET` | `/devices` | Bearer | 所有注册设备列表 |
+| `GET` | `/devices/{id}` | Bearer | 设备详情和实时指标 |
+| `GET` | `/devices/{id}/tasks` | Bearer | 设备关联任务列表 |
+| `GET` | `/groups` | Bearer | 设备分组列表 |
+| `GET` | `/tasks` | Bearer | 任务列表（最近 200 条） |
+| `POST` | `/tasks` | Bearer | 创建任务（单设备或按组） |
+| `GET` | `/tasks/{id}` | Bearer | 任务详情和执行结果 |
+| `GET` | `/audit-logs` | Bearer | 审计日志（最近 200 条） |
+| `GET` | `/aiops/report` | Bearer | AI Ops 健康分析报告 |
+| `GET` | `/agent/ws?token=...` | Query | Agent WebSocket 连接 |
+
+### 环境变量
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `LABOPS_ADDR` | `:8080` | 服务器监听地址 |
+| `LABOPS_DB_DRIVER` | `sqlite` | 数据库驱动: `sqlite` 或 `mysql` |
+| `LABOPS_DB_PATH` | `data/labops.db` | SQLite 数据库文件路径 |
+| `LABOPS_MYSQL_DSN` | `labops:labops@tcp(127.0.0.1:3306)/labops?...` | MySQL 连接字符串 |
+| `LABOPS_AGENT_TOKEN` | `dev-agent-token` | Agent WebSocket 连接令牌 |
+| `LABOPS_WEB_TOKEN` | `dev-token` | Web API 静态访问令牌 |
+| `LABOPS_HEARTBEAT_TIMEOUT` | `35s` | 心跳超时时间 |
+| `LABOPS_TASK_TIMEOUT` | `2m` | 任务执行超时时间 |
+| `VITE_PROXY_TARGET` | `http://localhost:8080` | Vite 开发服务器代理目标 |
+
+### 项目结构
+
+```text
+LabOps/
+├── web/                        # React 前端
+│   └── src/
+│       ├── api/                # Axios 客户端和 API 函数
+│       ├── components/         # 共享组件
+│       ├── hooks/              # 自定义 Hook
+│       ├── layouts/            # 布局组件
+│       ├── pages/              # 8 个页面组件
+│       ├── stores/             # Zustand 状态管理
+│       └── utils/              # 工具函数
+├── server/                     # Go 后端
+│   ├── cmd/server/main.go      # 入口点
+│   └── internal/core/
+│       ├── types.go            # 领域模型和协议定义
+│       ├── store.go            # 数据库 CRUD（SQLite + MySQL 双驱动）
+│       ├── app.go              # HTTP 路由、中间件、WebSocket Hub
+│       ├── api.go              # REST 处理器（14 个端点）
+│       ├── agent.go            # WebSocket Agent 处理器
+│       └── analyzer.go         # AI Ops 分析引擎
+├── agent/                      # Go Agent 程序
+│   └── cmd/agent/main.go       # Agent 入口点
+├── compose.yaml                # Docker Compose（6 个容器）
+├── scripts/                    # PowerShell 开发脚本
+├── docs/                       # 详细文档
+└── README.md
+```
 
 ---
 

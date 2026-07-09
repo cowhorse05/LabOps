@@ -42,36 +42,94 @@ type GroupSummary struct {
 
 // AiOpsReport is the complete analysis output.
 type AiOpsReport struct {
-	GeneratedAt string          `json:"generatedAt"`
-	Summary     string          `json:"summary"`
-	DeviceCount int             `json:"deviceCount"`
-	OnlineCount int             `json:"onlineCount"`
-	OfflineCnt  int             `json:"offlineCount"`
-	AvgHealth   int             `json:"avgHealth"`
-	Insights    []DeviceInsight `json:"insights"`
-	Groups      []GroupSummary  `json:"groups"`
+	GeneratedAt     string              `json:"generatedAt"`
+	Summary         string              `json:"summary"`
+	LLMAnalysis     string              `json:"llmAnalysis,omitempty"`
+	DeviceCount     int                 `json:"deviceCount"`
+	OnlineCount     int                 `json:"onlineCount"`
+	OfflineCnt      int                 `json:"offlineCount"`
+	AvgHealth       int                 `json:"avgHealth"`
+	Insights        []DeviceInsight     `json:"insights"`
+	Groups          []GroupSummary      `json:"groups"`
+	Recommendations []LLMRecommendation `json:"recommendations,omitempty"`
 }
 
 // Analyzer runs periodic AI Ops analysis over device and task data.
 type Analyzer struct {
-	store  *Store
-	config Config
+	store     *Store
+	config    Config
+	llmClient *LLMClient
+
+	// OnDispatch is called to dispatch a task to an agent. Set by App after construction.
+	OnDispatch func(ctx context.Context, task Task) error
+
+	autoExecuteReadOnly bool
 
 	mu     sync.RWMutex
 	latest *AiOpsReport
 	done   chan struct{}
 }
 
-// NewAnalyzer creates an Analyzer and starts its periodic analysis loop.
+// NewAnalyzer creates an Analyzer. Call Start() to begin the analysis loop.
 func NewAnalyzer(store *Store, config Config) *Analyzer {
 	a := &Analyzer{store: store, config: config, done: make(chan struct{})}
-	go a.loop()
+	a.initLLM()
 	return a
+}
+
+// Start begins the periodic analysis loop.
+func (a *Analyzer) Start() {
+	go a.loop()
 }
 
 // Stop gracefully shuts down the analyzer loop.
 func (a *Analyzer) Stop() {
 	close(a.done)
+}
+
+// initLLM reads LLM config (DB first, then env vars) and creates the client.
+func (a *Analyzer) initLLM() {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	dbCfg, err := a.store.GetLLMConfig(ctx)
+	if err != nil {
+		log.Printf("aiops: GetLLMConfig error: %v", err)
+	}
+	url := a.config.LLMURL
+	key := a.config.LLMAPIKey
+	model := "gpt-3.5-turbo"
+	providerType := "openai"
+	a.autoExecuteReadOnly = false
+	if dbCfg.Enabled && dbCfg.ProviderURL != "" {
+		url = dbCfg.ProviderURL
+		key = dbCfg.APIKey
+		if dbCfg.Model != "" {
+			model = dbCfg.Model
+		}
+		if dbCfg.ProviderType != "" {
+			providerType = dbCfg.ProviderType
+		}
+		a.autoExecuteReadOnly = dbCfg.AutoExecuteReadOnly
+	}
+	if url != "" && key != "" {
+		a.llmClient = NewLLMClient(url, key, model, providerType)
+		log.Printf("aiops: LLM client initialized (%s, model=%s, type=%s, autoExec=%v)", url, model, providerType, a.autoExecuteReadOnly)
+	} else {
+		a.llmClient = nil
+		if url == "" && key == "" {
+			log.Printf("aiops: LLM not configured — set LABOPS_LLM_URL and LABOPS_LLM_API_KEY env vars, or configure via Settings UI. Using rule-based analysis only.")
+		} else if url == "" {
+			log.Printf("aiops: LLM URL not configured — set LABOPS_LLM_URL env var or configure via Settings UI.")
+		} else {
+			log.Printf("aiops: LLM API key not configured — set LABOPS_LLM_API_KEY env var or configure via Settings UI.")
+		}
+	}
+}
+
+// TriggerRun forces an immediate analysis (e.g., after LLM config changes).
+func (a *Analyzer) TriggerRun() {
+	a.initLLM()
+	go a.run(context.Background())
 }
 
 func (a *Analyzer) loop() {
@@ -112,6 +170,27 @@ func (a *Analyzer) run(ctx context.Context) {
 	}
 
 	report := a.analyze(devices, tasks, groups)
+
+	// LLM-enhanced analysis (now with structured recommendations)
+	if a.llmClient != nil && len(devices) > 0 {
+		llmCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
+		defer cancel()
+		textAnalysis, recs, err := a.llmClient.AnalyzeDevicesStructured(llmCtx, devices, tasks)
+		if err != nil {
+			log.Printf("aiops: LLM structured analysis error: %v", err)
+			report.LLMAnalysis = "LLM 分析暂时不可用，显示规则引擎分析结果。"
+		} else {
+			if textAnalysis != "" {
+				report.LLMAnalysis = textAnalysis
+			}
+			report.Recommendations = a.validateRecommendations(recs, devices)
+		}
+	}
+
+	// Auto-execute read-only recommendations if enabled
+	if a.autoExecuteReadOnly && len(report.Recommendations) > 0 {
+		a.autoExecuteRecommendations(ctx, report.Recommendations)
+	}
 
 	a.mu.Lock()
 	a.latest = report
@@ -320,4 +399,64 @@ func (a *Analyzer) buildSummary(devices []Device, onlineCnt, avgHealth int, insi
 	}
 
 	return strings.Join(parts, " · ")
+}
+
+// validateRecommendations filters and sanitizes LLM-generated recommendations.
+func (a *Analyzer) validateRecommendations(recs []LLMRecommendation, devices []Device) []LLMRecommendation {
+	deviceMap := make(map[string]Device)
+	for _, d := range devices {
+		deviceMap[d.ID] = d
+	}
+
+	validated := make([]LLMRecommendation, 0, len(recs))
+	for _, rec := range recs {
+		dev, ok := deviceMap[rec.DeviceID]
+		if !ok {
+			log.Printf("aiops: recommendation %s references unknown device %s, skipping", rec.ID, rec.DeviceID)
+			continue
+		}
+		if rec.DeviceName == "" {
+			rec.DeviceName = dev.Name
+		}
+		rec.GroupName = dev.GroupName
+		if rec.Command == "" {
+			continue
+		}
+		if rec.Priority == "" {
+			rec.Priority = "medium"
+		}
+		validated = append(validated, rec)
+	}
+	return validated
+}
+
+// autoExecuteRecommendations creates and dispatches tasks for read-only recommendations.
+func (a *Analyzer) autoExecuteRecommendations(ctx context.Context, recs []LLMRecommendation) {
+	if a.OnDispatch == nil {
+		log.Printf("aiops: dispatch callback not ready, skipping auto-execute")
+		return
+	}
+	for i := range recs {
+		rec := &recs[i]
+		if rec.IsMutation {
+			continue
+		}
+		if rec.Status != "pending" {
+			continue
+		}
+		task, err := a.store.CreateTask(ctx, rec.DeviceID, rec.GroupName, rec.Command, "llm-auto")
+		if err != nil {
+			log.Printf("aiops: auto-execute create task error for rec %s: %v", rec.ID, err)
+			rec.Status = "error"
+			continue
+		}
+		rec.TaskID = task.ID
+		if err := a.OnDispatch(ctx, task); err != nil {
+			log.Printf("aiops: auto-execute dispatch error for rec %s: %v", rec.ID, err)
+			rec.Status = "error"
+		} else {
+			rec.Status = "executed"
+			log.Printf("aiops: auto-dispatched rec %s (%s → %s)", rec.ID, rec.DeviceName, rec.Command)
+		}
+	}
 }

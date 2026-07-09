@@ -19,6 +19,8 @@ type Config struct {
 	JWTSecret        string
 	HeartbeatTimeout time.Duration
 	TaskTimeout      time.Duration
+	LLMURL           string
+	LLMAPIKey        string
 }
 
 type App struct {
@@ -84,6 +86,8 @@ func NewApp(store *Store, config Config) *App {
 		},
 	}
 	app.analyzer = NewAnalyzer(store, config)
+	app.analyzer.OnDispatch = app.dispatchTask
+	app.analyzer.Start()
 	go app.maintenanceLoop()
 	return app
 }
@@ -116,6 +120,11 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/tasks/{id}", a.handleGetTask)
 	mux.HandleFunc("GET /api/audit-logs", a.handleAuditLogs)
 	mux.HandleFunc("GET /api/aiops/report", a.handleAiOpsReport)
+	mux.HandleFunc("GET /api/aiops/llm-config", a.handleGetLLMConfig)
+	mux.HandleFunc("PUT /api/aiops/llm-config", a.handleSaveLLMConfig)
+	mux.HandleFunc("POST /api/aiops/recommendations/execute", a.handleExecuteRecommendation)
+	mux.HandleFunc("GET /api/aiops/auto-mode", a.handleGetAutoMode)
+	mux.HandleFunc("PUT /api/aiops/auto-mode", a.handleSaveAutoMode)
 	mux.HandleFunc("GET /api/agent/ws", a.handleAgentWS)
 	return a.withCORS(a.withRateLimit(a.withAuth(mux)))
 }

@@ -17,7 +17,7 @@ USER labops
 EXPOSE 8080
 
 ENV LABOPS_ADDR=:8080
-ENV LABOPS_DB_PATH=/data/labops.db
+ENV LABOPS_DB_DRIVER=mysql
 
 HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://localhost:8080/api/health
 

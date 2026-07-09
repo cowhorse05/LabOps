@@ -2,13 +2,49 @@ package core
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 )
 
+// openTestStore opens a Store for testing. By default, it uses SQLite :memory:.
+// Set LABOPS_TEST_DB_DRIVER=mysql and LABOPS_TEST_MYSQL_DSN to test against MySQL.
+func openTestStore(t *testing.T) *Store {
+	t.Helper()
+	driver := Driver(os.Getenv("LABOPS_TEST_DB_DRIVER"))
+	if driver == "" {
+		driver = DriverSQLite
+	}
+	switch driver {
+	case DriverMySQL:
+		dsn := os.Getenv("LABOPS_TEST_MYSQL_DSN")
+		if dsn == "" {
+			t.Skip("LABOPS_TEST_MYSQL_DSN not set, skipping MySQL test")
+		}
+		store, err := OpenStore(driver, dsn)
+		if err != nil {
+			t.Fatalf("OpenStore(mysql): %v", err)
+		}
+		t.Cleanup(func() {
+			for _, tbl := range []string{"audit_logs", "task_results", "tasks", "agent_sessions", "devices", "users"} {
+				store.db.ExecContext(context.Background(), "DROP TABLE IF EXISTS `"+tbl+"`")
+			}
+			store.Close()
+		})
+		return store
+	default:
+		store, err := OpenStore(DriverSQLite, ":memory:")
+		if err != nil {
+			t.Fatalf("OpenStore(sqlite): %v", err)
+		}
+		t.Cleanup(func() { store.Close() })
+		return store
+	}
+}
+
 func TestStoreDeviceTaskAuditFlow(t *testing.T) {
 	ctx := context.Background()
-	store, err := OpenStore(":memory:")
+	store, err := OpenStore(DriverSQLite, ":memory:")
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
@@ -76,7 +112,7 @@ func TestStoreEdgeCases(t *testing.T) {
 	ctx := context.Background()
 	freshStore := func(t *testing.T) *Store {
 		t.Helper()
-		store, err := OpenStore(":memory:")
+		store, err := OpenStore(DriverSQLite, ":memory:")
 		if err != nil {
 			t.Fatalf("open store: %v", err)
 		}
@@ -518,7 +554,7 @@ func TestStoreEdgeCases(t *testing.T) {
 	})
 
 	t.Run("TestListTasks_Empty", func(t *testing.T) {
-		emptyStore, err := OpenStore(":memory:")
+		emptyStore, err := OpenStore(DriverSQLite, ":memory:")
 		if err != nil {
 			t.Fatalf("open store: %v", err)
 		}
@@ -542,7 +578,7 @@ func TestStoreEdgeCases(t *testing.T) {
 
 func TestSessionCRUD(t *testing.T) {
 	ctx := context.Background()
-	store, err := OpenStore(":memory:")
+	store, err := OpenStore(DriverSQLite, ":memory:")
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}

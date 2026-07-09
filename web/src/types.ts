@@ -78,3 +78,27 @@ export interface ChangePasswordRequest {
   oldPassword: string;
   newPassword: string;
 }
+
+export interface AiOpsLLMConfig {
+  providerUrl: string;
+  apiKey: string;
+  model: string;
+  providerType: string;
+  enabled: boolean;
+  autoExecuteReadOnly: boolean;
+  updatedAt: string;
+}
+
+export interface LLMRecommendation {
+  id: string;
+  deviceId: string;
+  deviceName: string;
+  groupName: string;
+  command: string;
+  reason: string;
+  priority: 'high' | 'medium' | 'low';
+  isMutation: boolean;
+  status: 'pending' | 'executed' | 'error';
+  taskId?: string;
+  createdAt: string;
+}

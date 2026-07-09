@@ -221,7 +221,7 @@ func TestDeviceFromRegister(t *testing.T) {
 
 func TestRegisterClient(t *testing.T) {
 	ctx := context.Background()
-	store, err := OpenStore(":memory:")
+	store, err := OpenStore(DriverSQLite, ":memory:")
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}
@@ -262,7 +262,7 @@ func TestRegisterClient(t *testing.T) {
 
 func TestUnregisterClient(t *testing.T) {
 	ctx := context.Background()
-	store, err := OpenStore(":memory:")
+	store, err := OpenStore(DriverSQLite, ":memory:")
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}
@@ -309,7 +309,7 @@ func TestUnregisterClient(t *testing.T) {
 
 func TestDispatchTask_NoClient(t *testing.T) {
 	ctx := context.Background()
-	store, err := OpenStore(":memory:")
+	store, err := OpenStore(DriverSQLite, ":memory:")
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}
@@ -374,7 +374,7 @@ func TestDispatchTask_NoClient(t *testing.T) {
 
 func TestDispatchPendingTasks(t *testing.T) {
 	ctx := context.Background()
-	store, err := OpenStore(":memory:")
+	store, err := OpenStore(DriverSQLite, ":memory:")
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}
@@ -439,7 +439,7 @@ func TestDispatchPendingTasks(t *testing.T) {
 func TestRefreshState(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, err := OpenStore(":memory:")
+	store, err := OpenStore(DriverSQLite, ":memory:")
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}
@@ -563,7 +563,7 @@ func TestRateLimiter(t *testing.T) {
 
 func TestNewAppDefaults(t *testing.T) {
 	t.Parallel()
-	store, err := OpenStore(":memory:")
+	store, err := OpenStore(DriverSQLite, ":memory:")
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}
@@ -602,7 +602,7 @@ func TestHandleAgentWS_TokenAuth(t *testing.T) {
 	t.Run("missing token returns 401", func(t *testing.T) {
 		t.Parallel()
 		ctx := context.Background()
-		store, err := OpenStore(":memory:")
+		store, err := OpenStore(DriverSQLite, ":memory:")
 		if err != nil {
 			t.Fatalf("OpenStore: %v", err)
 		}
@@ -631,7 +631,7 @@ func TestHandleAgentWS_TokenAuth(t *testing.T) {
 	t.Run("wrong token returns 401", func(t *testing.T) {
 		t.Parallel()
 		ctx := context.Background()
-		store, err := OpenStore(":memory:")
+		store, err := OpenStore(DriverSQLite, ":memory:")
 		if err != nil {
 			t.Fatalf("OpenStore: %v", err)
 		}
@@ -661,7 +661,7 @@ func TestHandleAgentWS_TokenAuth(t *testing.T) {
 	t.Run("valid token upgrades successfully", func(t *testing.T) {
 		t.Parallel()
 		ctx := context.Background()
-		store, err := OpenStore(":memory:")
+		store, err := OpenStore(DriverSQLite, ":memory:")
 		if err != nil {
 			t.Fatalf("OpenStore: %v", err)
 		}
@@ -694,7 +694,7 @@ func TestHandleAgentWS_Register(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	store, err := OpenStore(":memory:")
+	store, err := OpenStore(DriverSQLite, ":memory:")
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}
@@ -794,7 +794,7 @@ func TestHandleAgentWS_InvalidRegister(t *testing.T) {
 	t.Run("first message wrong type", func(t *testing.T) {
 		t.Parallel()
 		ctx := context.Background()
-		store, err := OpenStore(":memory:")
+		store, err := OpenStore(DriverSQLite, ":memory:")
 		if err != nil {
 			t.Fatalf("OpenStore: %v", err)
 		}
@@ -842,7 +842,7 @@ func TestHandleAgentWS_InvalidRegister(t *testing.T) {
 	t.Run("missing agentId and name", func(t *testing.T) {
 		t.Parallel()
 		ctx := context.Background()
-		store, err := OpenStore(":memory:")
+		store, err := OpenStore(DriverSQLite, ":memory:")
 		if err != nil {
 			t.Fatalf("OpenStore: %v", err)
 		}
@@ -895,7 +895,7 @@ func TestHandleAgentWS_Heartbeat(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	store, err := OpenStore(":memory:")
+	store, err := OpenStore(DriverSQLite, ":memory:")
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}
@@ -975,7 +975,7 @@ func TestHandleAgentWS_Disconnect(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	store, err := OpenStore(":memory:")
+	store, err := OpenStore(DriverSQLite, ":memory:")
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}

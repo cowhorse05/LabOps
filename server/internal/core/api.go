@@ -354,6 +354,167 @@ func (a *App) handleAiOpsReport(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, report)
 }
 
+// handleGetLLMConfig returns the current LLM configuration (API key redacted).
+func (a *App) handleGetLLMConfig(w http.ResponseWriter, r *http.Request) {
+	cfg, err := a.store.GetLLMConfig(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	// Redact API key: show only first 4 + last 4 characters
+	if len(cfg.APIKey) > 8 {
+		cfg.APIKey = cfg.APIKey[:4] + "****" + cfg.APIKey[len(cfg.APIKey)-4:]
+	} else if len(cfg.APIKey) > 0 {
+		cfg.APIKey = "****"
+	}
+	writeJSON(w, http.StatusOK, cfg)
+}
+
+// handleSaveLLMConfig updates the LLM configuration.
+func (a *App) handleSaveLLMConfig(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ProviderURL         string `json:"providerUrl"`
+		APIKey              string `json:"apiKey"`
+		Model               string `json:"model"`
+		ProviderType        string `json:"providerType"`
+		Enabled             bool   `json:"enabled"`
+		AutoExecuteReadOnly bool   `json:"autoExecuteReadOnly"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if req.Enabled {
+		if req.ProviderURL == "" {
+			writeError(w, http.StatusBadRequest, "providerUrl is required when LLM is enabled")
+			return
+		}
+	}
+	// If API key is empty, keep the existing one from the database
+	if req.APIKey == "" {
+		existing, err := a.store.GetLLMConfig(r.Context())
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		req.APIKey = existing.APIKey
+	}
+	if req.ProviderType == "" {
+		req.ProviderType = "openai"
+	}
+	cfg := LLMConfig{
+		ProviderURL:         req.ProviderURL,
+		APIKey:              req.APIKey,
+		Model:               req.Model,
+		ProviderType:        req.ProviderType,
+		Enabled:             req.Enabled,
+		AutoExecuteReadOnly: req.AutoExecuteReadOnly,
+	}
+	if err := a.store.SaveLLMConfig(r.Context(), cfg); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	// Trigger immediate re-analysis with the new config
+	go a.analyzer.TriggerRun()
+	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
+}
+
+// handleExecuteRecommendation creates and dispatches tasks from LLM recommendations.
+func (a *App) handleExecuteRecommendation(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		RecommendationID  string   `json:"recommendationId"`
+		RecommendationIDs []string `json:"recommendationIds"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	report := a.analyzer.LatestReport()
+	if report == nil {
+		writeError(w, http.StatusServiceUnavailable, "no analysis report available")
+		return
+	}
+
+	ids := req.RecommendationIDs
+	if req.RecommendationID != "" {
+		ids = append(ids, req.RecommendationID)
+	}
+	if len(ids) == 0 {
+		writeError(w, http.StatusBadRequest, "recommendationId or recommendationIds required")
+		return
+	}
+
+	var tasks []Task
+	var errs []string
+	for _, id := range ids {
+		var found *LLMRecommendation
+		for i := range report.Recommendations {
+			if report.Recommendations[i].ID == id {
+				found = &report.Recommendations[i]
+				break
+			}
+		}
+		if found == nil {
+			errs = append(errs, fmt.Sprintf("recommendation %s not found", id))
+			continue
+		}
+		if found.Status != "pending" {
+			errs = append(errs, fmt.Sprintf("recommendation %s already %s", id, found.Status))
+			continue
+		}
+		task, err := a.store.CreateTask(r.Context(), found.DeviceID, found.GroupName, found.Command, "user-llm")
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("%s: create task failed: %v", found.DeviceName, err))
+			continue
+		}
+		task.DeviceName = found.DeviceName
+		if err := a.dispatchTask(r.Context(), task); err != nil {
+			errs = append(errs, fmt.Sprintf("%s: dispatch failed: %v", found.DeviceName, err))
+			found.Status = "error"
+		} else {
+			found.Status = "executed"
+		}
+		found.TaskID = task.ID
+		tasks = append(tasks, task)
+	}
+	resp := map[string]any{"tasks": tasks}
+	if len(errs) > 0 {
+		resp["errors"] = errs
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// handleGetAutoMode returns the current auto-execute setting.
+func (a *App) handleGetAutoMode(w http.ResponseWriter, r *http.Request) {
+	cfg, err := a.store.GetLLMConfig(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"autoExecuteReadOnly": cfg.AutoExecuteReadOnly})
+}
+
+// handleSaveAutoMode toggles the auto-execute setting.
+func (a *App) handleSaveAutoMode(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		AutoExecuteReadOnly bool `json:"autoExecuteReadOnly"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	cfg, err := a.store.GetLLMConfig(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	cfg.AutoExecuteReadOnly = req.AutoExecuteReadOnly
+	if err := a.store.SaveLLMConfig(r.Context(), cfg); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	// Re-init to pick up the new setting
+	a.analyzer.TriggerRun()
+	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
+}
+
 const maxBodySize = 1 << 20 // 1 MiB
 
 func readJSON(w http.ResponseWriter, r *http.Request, dst any) bool {

@@ -7,42 +7,46 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
+	_ "github.com/go-sql-driver/mysql"
 	"golang.org/x/crypto/bcrypt"
+
 	_ "modernc.org/sqlite"
 )
 
+// Driver identifies the database backend.
+type Driver string
+
+const (
+	DriverSQLite Driver = "sqlite"
+	DriverMySQL  Driver = "mysql"
+)
+
 type Store struct {
-	db *sql.DB
+	db      *sql.DB
+	dialect Dialect
 }
 
-func OpenStore(path string) (*Store, error) {
-	if path != ":memory:" {
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			return nil, err
-		}
-	}
-	db, err := sql.Open("sqlite", path)
+func OpenStore(driver Driver, dsn string) (*Store, error) {
+	dialect, err := NewDialect(driver)
 	if err != nil {
 		return nil, err
 	}
-	// Allow multiple concurrent reads for file-based databases (read-heavy
-	// workloads). For :memory: databases, keep MaxOpenConns=1 because each
-	// connection creates its own in-memory database.
-	maxOpen := 1
-	if path != ":memory:" {
-		maxOpen = 4
+	if err := dialect.PreConnect(dsn); err != nil {
+		return nil, fmt.Errorf("pre-connect: %w", err)
 	}
-	db.SetMaxOpenConns(maxOpen)
-	if _, err := db.Exec("PRAGMA busy_timeout = 5000"); err != nil {
-		_ = db.Close()
+	db, err := sql.Open(dialect.DriverName(), dsn)
+	if err != nil {
 		return nil, err
 	}
-	return &Store{db: db}, nil
+	dialect.ConfigurePool(db, dsn)
+	if err := dialect.Validate(db); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("validate: %w", err)
+	}
+	return &Store{db: db, dialect: dialect}, nil
 }
 
 func (s *Store) Close() error {
@@ -50,97 +54,31 @@ func (s *Store) Close() error {
 }
 
 func (s *Store) Init(ctx context.Context) error {
-	schema := []string{
-		`CREATE TABLE IF NOT EXISTS users (
-			id TEXT PRIMARY KEY,
-			username TEXT NOT NULL UNIQUE,
-			display_name TEXT NOT NULL,
-			password TEXT NOT NULL,
-			roles TEXT NOT NULL,
-			must_change_password INTEGER NOT NULL DEFAULT 0,
-			created_at TEXT NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS devices (
-			id TEXT PRIMARY KEY,
-			name TEXT NOT NULL,
-			group_name TEXT NOT NULL,
-			profile TEXT NOT NULL,
-			version TEXT NOT NULL,
-			hostname TEXT NOT NULL,
-			os TEXT NOT NULL,
-			ip TEXT NOT NULL,
-			cpu_cores INTEGER NOT NULL,
-			memory_mb INTEGER NOT NULL,
-			disk_total_gb INTEGER NOT NULL,
-			cpu_usage REAL NOT NULL DEFAULT 0,
-			memory_usage REAL NOT NULL DEFAULT 0,
-			disk_usage REAL NOT NULL DEFAULT 0,
-			status TEXT NOT NULL,
-			last_seen TEXT NOT NULL,
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS agent_sessions (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			device_id TEXT NOT NULL,
-			remote_addr TEXT NOT NULL,
-			connected_at TEXT NOT NULL,
-			disconnected_at TEXT
-		)`,
-		`CREATE TABLE IF NOT EXISTS tasks (
-			id TEXT PRIMARY KEY,
-			device_id TEXT NOT NULL,
-			group_name TEXT NOT NULL,
-			command TEXT NOT NULL,
-			status TEXT NOT NULL,
-			requested_by TEXT NOT NULL,
-			created_at TEXT NOT NULL,
-			started_at TEXT,
-			finished_at TEXT
-		)`,
-		`CREATE TABLE IF NOT EXISTS task_results (
-			task_id TEXT PRIMARY KEY,
-			stdout TEXT NOT NULL,
-			stderr TEXT NOT NULL,
-			exit_code INTEGER NOT NULL,
-			duration_ms INTEGER NOT NULL,
-			created_at TEXT NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS audit_logs (
-			id TEXT PRIMARY KEY,
-			actor TEXT NOT NULL,
-			action TEXT NOT NULL,
-			device_id TEXT,
-			task_id TEXT,
-			status TEXT NOT NULL,
-			message TEXT NOT NULL,
-			created_at TEXT NOT NULL
-		)`,
-	}
-	for _, stmt := range schema {
+	for _, stmt := range buildDDL(s.dialect) {
 		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
 			return err
 		}
 	}
-	indexes := []string{
-		`CREATE INDEX IF NOT EXISTS idx_tasks_device_status ON tasks(device_id, status)`,
-		`CREATE INDEX IF NOT EXISTS idx_tasks_status_started ON tasks(status, started_at)`,
-		`CREATE INDEX IF NOT EXISTS idx_audit_logs_device ON audit_logs(device_id)`,
-		`CREATE INDEX IF NOT EXISTS idx_devices_group ON devices(group_name)`,
-	}
-	for _, stmt := range indexes {
+	for _, stmt := range buildIndexes(s.dialect) {
 		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
-			return err
+			if !s.dialect.IsDuplicateIndexError(err) {
+				return err
+			}
 		}
 	}
-	// Migrate: add must_change_password column for existing databases
-	_, _ = s.db.ExecContext(ctx, `ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0`)
+	for _, stmt := range buildMigrations(s.dialect) {
+		_, _ = s.db.ExecContext(ctx, stmt) // best-effort, column may already exist
+	}
+	for _, stmt := range buildSeedSQL(s.dialect) {
+		_, _ = s.db.ExecContext(ctx, stmt) // best-effort, row may already exist
+	}
 	hashed, err := bcrypt.GenerateFromPassword([]byte("admin"), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT OR IGNORE INTO users (id, username, display_name, password, roles, must_change_password, created_at)
-		VALUES ('user_admin', 'admin', 'LabOps Admin', ?, 'admin,operator', 1, ?)`, string(hashed), nowString())
+	_, err = s.db.ExecContext(ctx,
+		s.dialect.InsertOrIgnorePrefix()+" users (id, username, display_name, password, roles, must_change_password, created_at) VALUES ('user_admin', 'admin', 'LabOps Admin', ?, 'admin,operator', 1, ?)",
+		string(hashed), nowString())
 	return err
 }
 
@@ -199,6 +137,47 @@ func (s *Store) MustChangePassword(ctx context.Context, username string) bool {
 	return err == nil && must == 1
 }
 
+// GetLLMConfig returns the stored LLM configuration.
+func (s *Store) GetLLMConfig(ctx context.Context) (LLMConfig, error) {
+	var cfg LLMConfig
+	var enabled int
+	var autoExec int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT provider_url, api_key, model, provider_type, enabled, auto_execute_read_only, updated_at FROM llm_config WHERE id = 1`).
+		Scan(&cfg.ProviderURL, &cfg.APIKey, &cfg.Model, &cfg.ProviderType, &enabled, &autoExec, &cfg.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return LLMConfig{}, nil
+		}
+		return LLMConfig{}, err
+	}
+	cfg.Enabled = enabled == 1
+	cfg.AutoExecuteReadOnly = autoExec == 1
+	return cfg, nil
+}
+
+// SaveLLMConfig persists the LLM configuration (upsert into the single row).
+func (s *Store) SaveLLMConfig(ctx context.Context, cfg LLMConfig) error {
+	cfg.UpdatedAt = nowString()
+	enabled := 0
+	if cfg.Enabled {
+		enabled = 1
+	}
+	autoExec := 0
+	if cfg.AutoExecuteReadOnly {
+		autoExec = 1
+	}
+	cfgCols := []string{"provider_url", "api_key", "model", "provider_type", "enabled", "auto_execute_read_only", "updated_at"}
+	allCols := append([]string{"id"}, cfgCols...)
+	query := fmt.Sprintf("INSERT INTO llm_config (%s) VALUES (%s) %s",
+		strings.Join(allCols, ", "),
+		placeholders(len(allCols)),
+		s.dialect.UpsertSuffix("id", cfgCols))
+	_, err := s.db.ExecContext(ctx, query,
+		1, cfg.ProviderURL, cfg.APIKey, cfg.Model, cfg.ProviderType, enabled, autoExec, cfg.UpdatedAt)
+	return err
+}
+
 func (s *Store) UpsertDevice(ctx context.Context, d Device) error {
 	now := nowString()
 	if d.CreatedAt == "" {
@@ -210,29 +189,20 @@ func (s *Store) UpsertDevice(ctx context.Context, d Device) error {
 	if d.LastSeen == "" {
 		d.LastSeen = now
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO devices (
-		id, name, group_name, profile, version, hostname, os, ip, cpu_cores, memory_mb, disk_total_gb,
-		cpu_usage, memory_usage, disk_usage, status, last_seen, created_at, updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	ON CONFLICT(id) DO UPDATE SET
-		name = excluded.name,
-		group_name = excluded.group_name,
-		profile = excluded.profile,
-		version = excluded.version,
-		hostname = excluded.hostname,
-		os = excluded.os,
-		ip = excluded.ip,
-		cpu_cores = excluded.cpu_cores,
-		memory_mb = excluded.memory_mb,
-		disk_total_gb = excluded.disk_total_gb,
-		cpu_usage = excluded.cpu_usage,
-		memory_usage = excluded.memory_usage,
-		disk_usage = excluded.disk_usage,
-		status = excluded.status,
-		last_seen = excluded.last_seen,
-		updated_at = excluded.updated_at`,
-		d.ID, d.Name, d.GroupName, d.Profile, d.Version, d.Hostname, d.OS, d.IP, d.CPUCores, d.MemoryMB, d.DiskTotalGB,
-		d.CPUUsage, d.MemoryUsage, d.DiskUsage, d.Status, d.LastSeen, d.CreatedAt, d.UpdatedAt)
+
+	devCols := []string{"name", "group_name", "profile", "version", "hostname", "os", "ip",
+		"cpu_cores", "memory_mb", "disk_total_gb", "cpu_usage", "memory_usage", "disk_usage",
+		"status", "last_seen", "created_at", "updated_at"}
+	allCols := append([]string{"id"}, devCols...)
+	query := fmt.Sprintf("INSERT INTO devices (%s) VALUES (%s) %s",
+		strings.Join(allCols, ", "),
+		placeholders(len(allCols)),
+		s.dialect.UpsertSuffix("id", devCols))
+	_, err := s.db.ExecContext(ctx, query,
+		d.ID, d.Name, d.GroupName, d.Profile, d.Version, d.Hostname, d.OS, d.IP,
+		d.CPUCores, d.MemoryMB, d.DiskTotalGB,
+		d.CPUUsage, d.MemoryUsage, d.DiskUsage,
+		d.Status, d.LastSeen, d.CreatedAt, d.UpdatedAt)
 	return err
 }
 
@@ -383,8 +353,9 @@ func (s *Store) FailTask(ctx context.Context, taskID, stderr string) error {
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT OR REPLACE INTO task_results (task_id, stdout, stderr, exit_code, duration_ms, created_at)
-		VALUES (?, '', ?, -1, 0, ?)`, taskID, stderr, now)
+	query := fmt.Sprintf("%s (task_id, stdout, stderr, exit_code, duration_ms, created_at) VALUES (?, '', ?, -1, 0, ?)",
+		s.dialect.ReplaceInto("task_results"))
+	_, err = tx.ExecContext(ctx, query, taskID, stderr, now)
 	if err != nil {
 		return err
 	}
@@ -416,8 +387,9 @@ func (s *Store) CompleteTask(ctx context.Context, result TaskResultPayload) erro
 	if n == 0 {
 		return tx.Commit() // already in a terminal state
 	}
-	_, err = tx.ExecContext(ctx, `INSERT OR REPLACE INTO task_results (task_id, stdout, stderr, exit_code, duration_ms, created_at)
-		VALUES (?, ?, ?, ?, ?, ?)`, result.TaskID, result.Stdout, result.Stderr, result.ExitCode, result.DurationMS, now)
+	query := fmt.Sprintf("%s (task_id, stdout, stderr, exit_code, duration_ms, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+	s.dialect.ReplaceInto("task_results"))
+	_, err = tx.ExecContext(ctx, query, result.TaskID, result.Stdout, result.Stderr, result.ExitCode, result.DurationMS, now)
 	if err != nil {
 		return err
 	}
