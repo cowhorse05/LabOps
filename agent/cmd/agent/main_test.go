@@ -235,4 +235,31 @@ func TestAgentWSURLAdditional(t *testing.T) {
 		// Token is now sent via X-Agent-Token header, not query param
 		_ = header // placeholder for header-based test
 	})
+
+	t.Run("real mode ignores profile", func(t *testing.T) {
+		reg := buildRegister(config{
+			AgentID: "agent-real-test", Name: "real-device", GroupName: "lab",
+			RealMetrics: true,
+		})
+		if reg.Profile != "real" {
+			t.Fatalf("expected profile=real, got %s", reg.Profile)
+		}
+		if reg.Hostname == "" || reg.OS == "" || reg.CPUCores <= 0 || reg.MemoryMB <= 0 {
+			t.Fatalf("expected real system info, got %+v", reg)
+		}
+	})
+
+	t.Run("collectMetrics in valid range", func(t *testing.T) {
+		primeCPUMetrics()
+		hb := collectMetrics()
+		if hb.CPUUsage < 0 || hb.CPUUsage > 100 {
+			t.Fatalf("cpuUsage out of range: %f", hb.CPUUsage)
+		}
+		if hb.MemoryUsage < 0 || hb.MemoryUsage > 100 {
+			t.Fatalf("memoryUsage out of range: %f", hb.MemoryUsage)
+		}
+		if hb.DiskUsage < 0 || hb.DiskUsage > 100 {
+			t.Fatalf("diskUsage out of range: %f", hb.DiskUsage)
+		}
+	})
 }

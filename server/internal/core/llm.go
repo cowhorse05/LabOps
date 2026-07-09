@@ -177,8 +177,12 @@ func (c *LLMClient) analyzeAnthropic(ctx context.Context, devices []Device, task
 		return "", fmt.Errorf("llm request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", c.apiKey)
-	req.Header.Set("anthropic-version", "2023-06-01")
+	if c.useBearerAuth() {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	} else {
+		req.Header.Set("x-api-key", c.apiKey)
+		req.Header.Set("anthropic-version", "2023-06-01")
+	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -344,8 +348,12 @@ func (c *LLMClient) analyzeStructuredAnthropic(ctx context.Context, devices []De
 		return "", nil, fmt.Errorf("llm request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", c.apiKey)
-	req.Header.Set("anthropic-version", "2023-06-01")
+	if c.useBearerAuth() {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	} else {
+		req.Header.Set("x-api-key", c.apiKey)
+		req.Header.Set("anthropic-version", "2023-06-01")
+	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -434,7 +442,7 @@ func (c *LLMClient) buildStructuredPrompt(devices []Device, tasks []Task) string
 	sb.WriteString("\n## 輸出格式\n")
 	sb.WriteString("請嚴格按照以下 JSON 格式輸出（不要包含 markdown 代碼塊標記，只輸出純 JSON）：\n\n")
 	sb.WriteString(`{
-  "textAnalysis": "一段中文的整體分析報告，包含健康評估、需關注的設備和具體建議。使用 \\n 換行。",
+  "textAnalysis": "一段中文的整體分析報告，包含健康評估、需關注的設備和具體建議。使用實際換行符，不要在 JSON 中使用 \\n 字面量。",
   "recommendations": [
     {
       "deviceId": "設備ID（必須與上面設備列表中的 ID 完全一致）",
@@ -471,6 +479,9 @@ func (c *LLMClient) parseStructuredResponse(raw string, devices []Device) (strin
 		// Fallback: return raw text as analysis, no recommendations
 		return raw, nil, fmt.Errorf("llm json parse: %w (raw: %.200s)", err, raw)
 	}
+
+	// Normalize newlines: some LLMs output literal "\n" instead of real newlines.
+	parsed.TextAnalysis = normalizeNewlines(parsed.TextAnalysis)
 
 	// Build device lookup map
 	deviceMap := make(map[string]Device)
@@ -516,6 +527,12 @@ func (c *LLMClient) parseStructuredResponse(raw string, devices []Device) (strin
 	}
 
 	return parsed.TextAnalysis, recs, nil
+}
+
+// normalizeNewlines replaces literal "\n" with actual newlines in LLM output.
+// Some LLMs emit literal backslash-n even when told to use real newlines.
+func normalizeNewlines(s string) string {
+	return strings.ReplaceAll(s, "\\n", "\n")
 }
 
 // isDangerousCommand returns true if the command looks destructive.

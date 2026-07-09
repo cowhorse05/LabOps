@@ -340,10 +340,23 @@ func TestDispatchTask_NoClient(t *testing.T) {
 		Status:      StatusPending,
 	}
 
-	// dispatchTask with no connected client for this device should create a
-	// "command.queue" audit log rather than trying to send over WebSocket.
-	if err := app.dispatchTask(ctx, task); err != nil {
-		t.Fatalf("dispatchTask: %v", err)
+	// dispatchTask with no connected client for this device should return an
+	// error and fail the task, rather than silently queueing it.
+	err = app.dispatchTask(ctx, task)
+	if err == nil {
+		t.Fatal("expected error dispatching task to offline device, got nil")
+	}
+
+	// Verify the task was failed.
+	dbTask, ok, err := store.GetTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if !ok {
+		t.Fatal("task not found")
+	}
+	if dbTask.Status != StatusFailed {
+		t.Errorf("task status = %q, want %q", dbTask.Status, StatusFailed)
 	}
 
 	logs, err := store.ListAudit(ctx)
@@ -357,8 +370,8 @@ func TestDispatchTask_NoClient(t *testing.T) {
 	for _, l := range logs {
 		if l.Action == "command.queue" && l.TaskID == "task-1" {
 			found = true
-			if l.Status != StatusPending {
-				t.Errorf("audit status = %q, want %q", l.Status, StatusPending)
+			if l.Status != StatusFailed {
+				t.Errorf("audit status = %q, want %q", l.Status, StatusFailed)
 			}
 			break
 		}
@@ -406,22 +419,20 @@ func TestDispatchPendingTasks(t *testing.T) {
 	}
 
 	t.Run("dispatches all pending tasks for device", func(t *testing.T) {
+		// dispatchPendingTasks should attempt dispatch and fail tasks when
+		// no agent is connected (rather than silently queueing).
 		if err := app.dispatchPendingTasks(ctx, "pending-dev"); err != nil {
 			t.Fatalf("dispatchPendingTasks: %v", err)
 		}
 
-		logs, err := store.ListAudit(ctx)
+		// Verify tasks were failed due to agent not connected.
+		tasks, err := store.PendingTasksForDevice(ctx, "pending-dev")
 		if err != nil {
-			t.Fatalf("ListAudit: %v", err)
+			t.Fatalf("PendingTasksForDevice: %v", err)
 		}
-		var queueLogs int
-		for _, l := range logs {
-			if l.Action == "command.queue" {
-				queueLogs++
-			}
-		}
-		if queueLogs != 3 {
-			t.Fatalf("expected 3 command.queue audit logs, got %d", queueLogs)
+		// No tasks should remain pending (all should be failed).
+		if len(tasks) != 0 {
+			t.Errorf("expected 0 pending tasks, got %d", len(tasks))
 		}
 	})
 

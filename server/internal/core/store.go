@@ -206,6 +206,37 @@ func (s *Store) UpsertDevice(ctx context.Context, d Device) error {
 	return err
 }
 
+// CreateDevice inserts a new device. It fails if a device with the same id
+// already exists (pure INSERT, not upsert).
+func (s *Store) CreateDevice(ctx context.Context, d Device) error {
+	now := nowString()
+	if d.CreatedAt == "" {
+		d.CreatedAt = now
+	}
+	if d.UpdatedAt == "" {
+		d.UpdatedAt = now
+	}
+	if d.LastSeen == "" {
+		d.LastSeen = now
+	}
+
+	_, err := s.db.ExecContext(ctx, `INSERT INTO devices (id, name, group_name, profile, version, hostname, os, ip,
+		cpu_cores, memory_mb, disk_total_gb, cpu_usage, memory_usage, disk_usage, status, last_seen, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		d.ID, d.Name, d.GroupName, d.Profile, d.Version, d.Hostname, d.OS, d.IP,
+		d.CPUCores, d.MemoryMB, d.DiskTotalGB,
+		d.CPUUsage, d.MemoryUsage, d.DiskUsage,
+		d.Status, d.LastSeen, d.CreatedAt, d.UpdatedAt)
+	return err
+}
+
+// DeleteDevice removes a device from the database. The agent can re-create
+// the device on reconnect via UpsertDevice (soft delete semantics).
+func (s *Store) DeleteDevice(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM devices WHERE id = ?`, id)
+	return err
+}
+
 func (s *Store) UpdateHeartbeat(ctx context.Context, deviceID string, hb HeartbeatPayload) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE devices SET cpu_usage = ?, memory_usage = ?, disk_usage = ?, status = ?, last_seen = ?, updated_at = ? WHERE id = ?`,
 		hb.CPUUsage, hb.MemoryUsage, hb.DiskUsage, StatusOnline, nowString(), nowString(), deviceID)
@@ -397,8 +428,15 @@ func (s *Store) CompleteTask(ctx context.Context, result TaskResultPayload) erro
 }
 
 func (s *Store) TimeoutTasks(ctx context.Context, cutoff string) error {
+	// Timeout running tasks (started but not finished)
 	_, err := s.db.ExecContext(ctx, `UPDATE tasks SET status = ?, finished_at = ? WHERE status = ? AND started_at < ?`,
 		StatusTimeout, nowString(), StatusRunning, cutoff)
+	if err != nil {
+		return err
+	}
+	// Timeout stale pending tasks (never picked up, e.g. agent offline)
+	_, err = s.db.ExecContext(ctx, `UPDATE tasks SET status = ?, finished_at = ? WHERE status = ? AND created_at < ?`,
+		StatusTimeout, nowString(), StatusPending, cutoff)
 	return err
 }
 

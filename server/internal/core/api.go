@@ -32,6 +32,18 @@ type createTaskRequest struct {
 	Command   string `json:"command"`
 }
 
+type createDeviceRequest struct {
+	ID          string `json:"id,omitempty"`
+	Name        string `json:"name"`
+	GroupName   string `json:"groupName"`
+	Hostname    string `json:"hostname,omitempty"`
+	OS          string `json:"os,omitempty"`
+	IP          string `json:"ip,omitempty"`
+	CPUCores    int    `json:"cpuCores,omitempty"`
+	MemoryMB    int    `json:"memoryMb,omitempty"`
+	DiskTotalGB int    `json:"diskTotalGb,omitempty"`
+}
+
 func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
@@ -220,6 +232,95 @@ func (a *App) handleListDeviceTasks(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, tasks)
 }
 
+func (a *App) handleCreateDevice(w http.ResponseWriter, r *http.Request) {
+	var req createDeviceRequest
+	if !readJSON(w, r, &req) {
+		return
+	}
+	req.Name = strings.TrimSpace(req.Name)
+	req.GroupName = strings.TrimSpace(req.GroupName)
+
+	if req.Name == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	if req.GroupName == "" {
+		writeError(w, http.StatusBadRequest, "groupName is required")
+		return
+	}
+
+	id := req.ID
+	if id == "" {
+		id = "dev_" + strings.TrimPrefix(newID(""), "_")
+	} else if _, ok, _ := a.store.GetDevice(r.Context(), id); ok {
+		writeError(w, http.StatusConflict, "device with this id already exists")
+		return
+	}
+
+	hostname := req.Hostname
+	if hostname == "" {
+		hostname = req.Name
+	}
+
+	device := Device{
+		ID:          id,
+		Name:        req.Name,
+		GroupName:   req.GroupName,
+		Profile:     "manual",
+		Version:     "0.0.0",
+		Hostname:    hostname,
+		OS:          strings.TrimSpace(req.OS),
+		IP:          strings.TrimSpace(req.IP),
+		CPUCores:    req.CPUCores,
+		MemoryMB:    req.MemoryMB,
+		DiskTotalGB: req.DiskTotalGB,
+		Status:      StatusOffline,
+	}
+
+	if err := a.store.CreateDevice(r.Context(), device); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	_ = a.store.CreateAudit(r.Context(), AuditLog{
+		Actor:    "admin",
+		Action:   "device.create",
+		DeviceID: id,
+		Status:   StatusSuccess,
+		Message:  fmt.Sprintf("manually created device '%s' in group '%s'", req.Name, req.GroupName),
+	})
+
+	writeJSON(w, http.StatusCreated, device)
+}
+
+func (a *App) handleDeleteDevice(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	device, ok, err := a.store.GetDevice(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !ok {
+		writeError(w, http.StatusNotFound, "device not found")
+		return
+	}
+
+	if err := a.store.DeleteDevice(r.Context(), id); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	_ = a.store.CreateAudit(r.Context(), AuditLog{
+		Actor:    "admin",
+		Action:   "device.delete",
+		DeviceID: id,
+		Status:   StatusSuccess,
+		Message:  fmt.Sprintf("deleted device '%s'", device.Name),
+	})
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
 func (a *App) handleGroups(w http.ResponseWriter, r *http.Request) {
 	a.refreshState(r.Context())
 	groups, err := a.store.Groups(r.Context())
@@ -307,6 +408,8 @@ func (a *App) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 		task.DeviceName = device.Name
 		if err := a.dispatchTask(r.Context(), task); err != nil {
 			errs = append(errs, fmt.Sprintf("%s: dispatch failed: %v", device.Name, err))
+			task.Status = StatusFailed
+			tasks = append(tasks, task)
 			continue
 		}
 		fresh, ok, err := a.store.GetTask(r.Context(), task.ID)

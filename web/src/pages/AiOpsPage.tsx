@@ -119,7 +119,7 @@ export default function AiOpsPage() {
             <p>该操作将修改系统状态：</p>
             <pre style={{ background: '#f5f5f5', padding: 8, borderRadius: 4 }}>{rec.command}</pre>
             <p>设备：<strong>{rec.deviceName}</strong></p>
-            <p>原因：{rec.reason}</p>
+            <p style={{ whiteSpace: 'pre-wrap' }}>原因：{rec.reason}</p>
           </div>
         ),
         okText: '确认执行',
@@ -232,7 +232,7 @@ export default function AiOpsPage() {
                   key={rec.id}
                   size="small"
                   style={{ marginBottom: 8 }}
-                  type={rec.status === 'executed' ? 'inner' : 'default'}
+                  {...(rec.status === 'executed' ? { type: 'inner' as const } : {})}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div style={{ flex: 1 }}>
@@ -251,7 +251,7 @@ export default function AiOpsPage() {
                           {rec.command}
                         </pre>
                       </div>
-                      <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+                      <Typography.Text type="secondary" style={{ fontSize: 13, whiteSpace: 'pre-wrap' }}>
                         {rec.reason}
                       </Typography.Text>
                     </div>

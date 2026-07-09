@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { App, Button, Card, Input, Progress, Space, Table, Tag, Typography } from 'antd';
-import { EyeOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons';
+import { App, Button, Card, Form, Input, InputNumber, Modal, Popconfirm, Progress, Select, Space, Table, Tag, Typography } from 'antd';
+import { DeleteOutlined, EyeOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { labopsApi } from '@/api/labops';
@@ -12,6 +12,12 @@ export default function DevicesPage() {
   const [keyword, setKeyword] = useState('');
   const { message } = App.useApp();
   const { data: devices, loading, reload } = useLoadable(() => labopsApi.devices(), { intervalMs: 10000, onError: () => message.error('加载设备列表失败') });
+  const { data: groups } = useLoadable(() => labopsApi.groups(), { intervalMs: 60000 });
+
+  const [createModalVisible, setCreateModalVisible] = useState(false);
+  const [createForm] = Form.useForm();
+  const [creating, setCreating] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const k = keyword.trim().toLowerCase();
@@ -19,14 +25,47 @@ export default function DevicesPage() {
     return (devices ?? []).filter((d) => [d.name, d.groupName, d.os, d.ip, d.hostname].some((v) => v.toLowerCase().includes(k)));
   }, [devices, keyword]);
 
+  const handleCreate = async () => {
+    try {
+      const values = await createForm.validateFields();
+      setCreating(true);
+      await labopsApi.createDevice(values);
+      message.success(`设备 ${values.name} 创建成功`);
+      setCreateModalVisible(false);
+      createForm.resetFields();
+      reload();
+    } catch (err: any) {
+      if (err?.errorFields) return;
+      message.error(`创建设备失败: ${err?.response?.data?.error || err?.message}`);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      setDeleting(id);
+      await labopsApi.deleteDevice(id);
+      message.success('设备已删除');
+      reload();
+    } catch (err: any) {
+      message.error(`删除失败: ${err?.response?.data?.error || err?.message}`);
+    } finally {
+      setDeleting(null);
+    }
+  };
+
   return (
     <div className="page">
       <div className="page-head">
         <div>
           <Typography.Title level={2}>设备</Typography.Title>
-          <Typography.Text className="muted">Agent 连接后会自动出现在这里。</Typography.Text>
+          <Typography.Text className="muted">Agent 连接后会自动出现在这里，也可以手动创建。</Typography.Text>
         </div>
         <Space>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalVisible(true)}>
+            新建设备
+          </Button>
           <Input
             allowClear
             prefix={<SearchOutlined />}
@@ -78,14 +117,67 @@ export default function DevicesPage() {
             {
               title: '操作',
               render: (_, record) => (
-                <Button type="link" icon={<EyeOutlined />} onClick={() => navigate(`/devices/${record.id}`)}>
-                  详情
-                </Button>
+                <Space>
+                  <Button type="link" icon={<EyeOutlined />} onClick={() => navigate(`/devices/${record.id}`)}>
+                    详情
+                  </Button>
+                  <Popconfirm
+                    title="确定删除该设备吗？"
+                    description="删除后设备将从列表中移除，Agent 重新连接时会自动恢复。"
+                    onConfirm={() => handleDelete(record.id)}
+                    okText="确定"
+                    cancelText="取消"
+                  >
+                    <Button type="link" danger icon={<DeleteOutlined />} loading={deleting === record.id}>
+                      删除
+                    </Button>
+                  </Popconfirm>
+                </Space>
               ),
             },
           ]}
         />
       </Card>
+      <Modal
+        title="新建设备"
+        open={createModalVisible}
+        onOk={handleCreate}
+        onCancel={() => { setCreateModalVisible(false); createForm.resetFields(); }}
+        confirmLoading={creating}
+        destroyOnClose
+      >
+        <Form form={createForm} layout="vertical">
+          <Form.Item name="name" label="设备名称" rules={[{ required: true, message: '请输入设备名称' }]}>
+            <Input placeholder="例如: 我的笔记本" />
+          </Form.Item>
+          <Form.Item name="groupName" label="分组" rules={[{ required: true, message: '请输入或选择分组' }]}>
+            <Select
+              mode="tags"
+              maxCount={1}
+              placeholder="输入分组名，例如: lab、prod"
+              options={(groups ?? []).map((g) => ({ label: g.name, value: g.name }))}
+            />
+          </Form.Item>
+          <Form.Item name="hostname" label="主机名">
+            <Input placeholder="自动使用设备名称" />
+          </Form.Item>
+          <Form.Item name="os" label="操作系统">
+            <Input placeholder="例如: Ubuntu 24.04" />
+          </Form.Item>
+          <Form.Item name="ip" label="IP 地址">
+            <Input placeholder="例如: 192.168.1.100" />
+          </Form.Item>
+          <Form.Item name="cpuCores" label="CPU 核心数">
+            <InputNumber min={1} max={256} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="memoryMb" label="内存 (MB)">
+            <InputNumber min={128} max={1048576} step={1024} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="diskTotalGb" label="磁盘 (GB)">
+            <InputNumber min={1} max={65536} style={{ width: '100%' }} />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 }

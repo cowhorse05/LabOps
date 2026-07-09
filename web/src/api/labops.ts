@@ -29,6 +29,23 @@ export const labopsApi = {
     const { data } = await api.get<Device>(`/devices/${id}`);
     return data;
   },
+  async createDevice(input: {
+    name: string;
+    groupName: string;
+    hostname?: string;
+    os?: string;
+    ip?: string;
+    cpuCores?: number;
+    memoryMb?: number;
+    diskTotalGb?: number;
+  }) {
+    const { data } = await api.post<Device>('/devices', input);
+    return data;
+  },
+  async deleteDevice(id: string) {
+    const { data } = await api.delete<{ status: string }>(`/devices/${id}`);
+    return data;
+  },
   async deviceTasks(id: string) {
     const { data } = await api.get<Task[]>(`/devices/${id}/tasks`);
     return data;

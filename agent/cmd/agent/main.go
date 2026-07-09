@@ -10,6 +10,7 @@ import (
 	"log"
 	"math"
 	"math/rand"
+	goNet "net"
 	"net/http"
 	"net/url"
 	"os"
@@ -20,6 +21,11 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/disk"
+	"github.com/shirou/gopsutil/v4/host"
+	"github.com/shirou/gopsutil/v4/mem"
+	psnet "github.com/shirou/gopsutil/v4/net"
 )
 
 const version = "0.1.0"
@@ -31,6 +37,7 @@ type config struct {
 	Name        string
 	GroupName   string
 	MockProfile string
+	RealMetrics bool
 }
 
 type envelope struct {
@@ -104,10 +111,13 @@ func parseFlags() config {
 	flag.StringVar(&cfg.GroupName, "group", env("LABOPS_AGENT_GROUP", "default"), "device group")
 	flag.StringVar(&cfg.MockProfile, "mock-profile", env("LABOPS_MOCK_PROFILE", "ubuntu"), "mock profile")
 	flag.StringVar(&cfg.AgentID, "id", env("LABOPS_AGENT_ID", ""), "stable agent id")
+	var realMetrics bool
+	flag.BoolVar(&realMetrics, "real", parseBoolEnv("LABOPS_AGENT_REAL"), "collect real system metrics instead of mock data")
 	flag.Parse()
 	if cfg.AgentID == "" {
 		cfg.AgentID = "agent-" + sanitizeID(cfg.Name)
 	}
+	cfg.RealMetrics = realMetrics
 	return cfg
 }
 
@@ -139,7 +149,12 @@ func run(cfg config) error {
 		defer writeMu.Unlock()
 		return conn.WriteJSON(v)
 	}
-	go heartbeatLoop(ctx, send, cancel, cfg.MockProfile)
+	if cfg.RealMetrics {
+		primeCPUMetrics()
+		go heartbeatLoop(ctx, send, cancel, collectMetrics)
+	} else {
+		go heartbeatLoop(ctx, send, cancel, func() heartbeatPayload { return mockHeartbeat(cfg.MockProfile) })
+	}
 
 	// Periodically reset the read deadline so a cancelled context (from a failed
 	// heartbeat) causes ReadJSON to return an error rather than blocking forever.
@@ -197,7 +212,7 @@ func run(cfg config) error {
 	}
 }
 
-func heartbeatLoop(ctx context.Context, send func(any) error, cancel context.CancelFunc, profile string) {
+func heartbeatLoop(ctx context.Context, send func(any) error, cancel context.CancelFunc, collect func() heartbeatPayload) {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -205,7 +220,7 @@ func heartbeatLoop(ctx context.Context, send func(any) error, cancel context.Can
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if err := send(envelope{Type: "heartbeat", Payload: mockHeartbeat(profile)}); err != nil {
+			if err := send(envelope{Type: "heartbeat", Payload: collect()}); err != nil {
 				log.Printf("heartbeat send failed, triggering reconnect: %v", err)
 				cancel()
 				return
@@ -295,6 +310,9 @@ func truncateOutput(buf *bytes.Buffer, limit int64) string {
 }
 
 func buildRegister(cfg config) registerPayload {
+	if cfg.RealMetrics {
+		return collectSystemInfo(cfg)
+	}
 	profile := profileSpec(cfg.MockProfile)
 	hostname := cfg.Name
 	if profile.HostnameSuffix != "" {
@@ -360,6 +378,114 @@ func jitter(base float64) float64 {
 	return math.Round(value*10) / 10
 }
 
+// collectSystemInfo gathers real system information for agent registration.
+func collectSystemInfo(cfg config) registerPayload {
+	hostname, _ := os.Hostname()
+
+	info, err := host.Info()
+	var osName string
+	if err == nil {
+		osName = fmt.Sprintf("%s %s", info.Platform, info.PlatformVersion)
+	} else {
+		osName = runtime.GOOS
+	}
+
+	cpuCount, _ := cpu.Counts(true)
+	if cpuCount <= 0 {
+		cpuCount = runtime.NumCPU()
+	}
+
+	memInfo, err := mem.VirtualMemory()
+	var memoryMB int
+	if err == nil {
+		memoryMB = int(memInfo.Total / (1024 * 1024))
+	}
+
+	// Sum disk totals across all non-zero partitions.
+	var diskTotalGB int
+	partitions, err := disk.Partitions(false)
+	if err == nil {
+		for _, p := range partitions {
+			usage, err := disk.Usage(p.Mountpoint)
+			if err == nil && usage.Total > 0 {
+				diskTotalGB += int(usage.Total / (1024 * 1024 * 1024))
+			}
+		}
+	}
+
+	// Pick first non-loopback IPv4 address.
+	var ip string
+	ifaces, err := psnet.Interfaces()
+	if err == nil {
+		for _, iface := range ifaces {
+			for _, addr := range iface.Addrs {
+				// addr.Addr is a string like "192.168.1.100/24"
+				ipStr := strings.Split(addr.Addr, "/")[0]
+				parsed := goNet.ParseIP(ipStr)
+				if parsed != nil && !parsed.IsLoopback() && parsed.To4() != nil {
+					ip = ipStr
+					break
+				}
+			}
+			if ip != "" {
+				break
+			}
+		}
+	}
+
+	return registerPayload{
+		AgentID:     cfg.AgentID,
+		Name:        cfg.Name,
+		GroupName:   cfg.GroupName,
+		Version:     version,
+		Profile:     "real",
+		Hostname:    hostname,
+		OS:          osName,
+		IP:          ip,
+		CPUCores:    cpuCount,
+		MemoryMB:    memoryMB,
+		DiskTotalGB: diskTotalGB,
+	}
+}
+
+// primeCPUMetrics primes the gopsutil CPU percent collector so that
+// subsequent zero-interval calls return instantaneous deltas.
+func primeCPUMetrics() {
+	cpu.Percent(time.Second, false)
+}
+
+// collectMetrics gathers real-time system metrics for heartbeat reporting.
+func collectMetrics() heartbeatPayload {
+	cpuPercents, _ := cpu.Percent(0, false)
+
+	memInfo, _ := mem.VirtualMemory()
+	var memPercent float64
+	if memInfo != nil {
+		memPercent = memInfo.UsedPercent
+	}
+
+	// Use the first available partition's used percent.
+	var diskPercent float64
+	partitions, err := disk.Partitions(false)
+	if err == nil && len(partitions) > 0 {
+		usage, err := disk.Usage(partitions[0].Mountpoint)
+		if err == nil {
+			diskPercent = usage.UsedPercent
+		}
+	}
+
+	var cpuPercent float64
+	if len(cpuPercents) > 0 {
+		cpuPercent = cpuPercents[0]
+	}
+
+	return heartbeatPayload{
+		CPUUsage:    math.Round(cpuPercent*10) / 10,
+		MemoryUsage: math.Round(memPercent*10) / 10,
+		DiskUsage:   math.Round(diskPercent*10) / 10,
+	}
+}
+
 func agentWSURL(serverURL string) (string, error) {
 	u, err := url.Parse(serverURL)
 	if err != nil {
@@ -392,6 +518,11 @@ func sanitizeID(value string) string {
 		return fmt.Sprintf("node-%d", time.Now().Unix())
 	}
 	return result
+}
+
+func parseBoolEnv(key string) bool {
+	v := strings.ToLower(os.Getenv(key))
+	return v == "1" || v == "true" || v == "yes"
 }
 
 func env(key, fallback string) string {
