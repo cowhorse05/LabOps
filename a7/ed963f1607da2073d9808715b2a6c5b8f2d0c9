@@ -1,0 +1,41 @@
+README.md
+  s_3a46daa72ebdd5::t_68945edaa930f6 44-48,52-53,60-62,64,67,69-72,74-77,80-86,94,104-174
+scripts/deploy.sh
+  s_3a46daa72ebdd5::t_dd6a02dcb94ffc 1-305
+server/internal/core/api.go
+  s_3a46daa72ebdd5::t_bbca401034ae8d 383-407
+  s_3a46daa72ebdd5::t_256835e04f3101 168
+  s_3a46daa72ebdd5::t_b855d9a6e2098e 79-95,137
+  s_3a46daa72ebdd5::t_c02098a68a4eca 135
+  s_3a46daa72ebdd5::t_a6b920e54fae3f 138-141
+  s_3a46daa72ebdd5::t_f6835d1197d7a0 161,163
+  s_3a46daa72ebdd5::t_83a74fa1075e13 162
+  s_3a46daa72ebdd5::t_99816daa5173d5 136
+  s_3a46daa72ebdd5::t_d74aa6b2a4d1a8 117,120
+server/internal/core/app.go
+  s_3a46daa72ebdd5::t_aa0d4f8fbdcf06 181-194
+scripts/deploy.ps1
+  s_3a46daa72ebdd5::t_1b66841a2ae51c 1-178
+web/src/stores/auth.ts
+  s_3a46daa72ebdd5::t_306a4537456635 15,27-30,34,38,48
+scripts/dev.sh
+  s_3a46daa72ebdd5::t_5c417171764ba2 1-20
+server/internal/core/store.go
+  s_3a46daa72ebdd5::t_eab0ee8a6b8394 166-180
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.10-trip",
+  "base_commit_sha": "a7ed963f1607da2073d9808715b2a6c5b8f2d0c9",
+  "prompts": {},
+  "sessions": {
+    "s_3a46daa72ebdd5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0672ce52-2544-4772-b7a8-be728d6d1f03",
+        "model": "deepseek-v4-pro"
+      },
+      "human_author": "Yufeng Li （李裕峰） <li.yufeng@trip.com>"
+    }
+  }
+}
