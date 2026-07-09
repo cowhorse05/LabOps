@@ -16,7 +16,7 @@ Planned items:
 - [x] Add Docker Compose demo
 - [x] Verify web build and unit test
 - [x] Verify Docker Compose config
-- [ ] Verify Go tests and full Compose run
+- [x] Verify Go tests and full Compose run
 
 Notes:
 
@@ -25,7 +25,26 @@ Notes:
 - The MVP focuses on a real agent/server/web loop instead of pure mock data.
 - Web verification passed with `npm run build` and `npm test`.
 - `docker compose config` passed.
-- Go verification is blocked by Docker image pull failures for `golang:1.23-alpine`; retry after registry/network recovers or install Go locally.
+- ~~Go verification is blocked by Docker image pull failures for `golang:1.23-alpine`; retry after registry/network recovers or install Go locally.~~ ✅ Resolved: Go 1.26.5 installed locally, all tests pass (Server 50 funcs + Agent 7 funcs).
+
+## 2026-07-09 Rounds 14-19 — 审计修复 + 测试 + CI + 文档
+
+All planned items completed across 6 rounds:
+
+- [x] Round 14: Dead code removal (`createTaskResponse`), Session CRUD tests, doc updates
+- [x] Round 15: agent.go unit tests (10 functions, 28 subtests), final code audit (21 files)
+- [x] Round 16: SQL transactions for FailTask/CompleteTask, DB indexes (4), DeviceDetailPage API endpoint
+- [x] Round 17: handleAgentWS WebSocket integration tests (5 functions)
+- [x] Round 18: GitHub Actions CI workflow (go vet/test + tsc/build)
+- [x] Round 19: v0.3 file distribution design spec + README updates + test count corrections
+
+Final state:
+- Server: 50 test functions PASS, go vet clean, coverage 72.3%
+- Agent: 7 test functions PASS, go vet clean
+- Web: TypeScript zero errors, build pass
+- CI: GitHub Actions configured (3 parallel jobs)
+- Docs: 9 markdown + 2 spec files, all up to date
+- Deferred: admin password enforcement / JWT session (architectural, needs separate feature branch)
 
 ## 2026-07-08 (afternoon update)
 

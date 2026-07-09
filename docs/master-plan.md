@@ -289,7 +289,11 @@ Status 常量：`online/offline` (设备), `pending/running/success/failed/timeo
 - [x] 写 `docs/dev-log.md`：每阶段总结、完成项、未完成项、原因
 - [x] 写 `docs/report.md`：面试/课程汇报版项目说明
 - [x] 标记 Todo 完成情况，未完成项移动到 Roadmap
-- [x] 演示环境完整验证（Go test ✅, Docker Compose ✅）
+- [x] 演示环境完整验证（Go test ✅ 50+7 函数, Docker Compose ✅）
+- [x] GitHub Actions CI 接入
+- [x] 代码审计 3 中等问题修复（事务/索引/API 端点）
+- [x] WebSocket handler 集成测试
+- [x] v0.3 文件分发设计文档
 
 ### 测试状态更新
 
@@ -366,13 +370,13 @@ docs/features/<name>/
 
 ### 7.1 MVP 验收标准
 
-- [ ] Windows 下能用 PowerShell 启动开发环境
-- [ ] `docker compose up` 后，前端能看到 4 台模拟设备在线
-- [ ] 停掉一个 Agent 容器后，设备进入离线或心跳超时状态
-- [ ] 前端对单台设备执行命令，能看到 stdout、stderr、exit code
-- [ ] 对设备组执行批量命令，每台设备有独立任务结果
-- [ ] 审计页能看到操作者、设备、命令、时间、结果
-- [ ] 重启 Server 后，设备、任务、审计记录仍可查询 (SQLite 持久化)
+- [x] Windows 下能用 PowerShell 启动开发环境
+- [x] `docker compose up` 后，前端能看到 4 台模拟设备在线
+- [x] 停掉一个 Agent 容器后，设备进入离线或心跳超时状态
+- [x] 前端对单台设备执行命令，能看到 stdout、stderr、exit code
+- [x] 对设备组执行批量命令，每台设备有独立任务结果
+- [x] 审计页能看到操作者、设备、命令、时间、结果
+- [x] 重启 Server 后，设备、任务、审计记录仍可查询 (SQLite 持久化)
 
 ### 7.2 测试类型与状态
 
