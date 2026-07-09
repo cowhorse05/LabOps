@@ -1,5 +1,24 @@
 # LabOps 变更日志
 
+## 2026-07-09 Round 19 — 文档更新 + v0.3 文件分发 Spec
+
+### 文档
+
+- **新增 `docs/features/file-distribution/design.md`**：v0.3 文件分发功能完整设计 SSOT
+  - REST API: `POST /api/files` (multipart)、`GET /api/files`、`GET /api/files/{id}`、`GET /api/files/{id}/blob`
+  - WebSocket 协议: `file_push` (server→agent) + `file_result` (agent→server)
+  - 数据模型: `file_tasks` 表，含 SHA-256 校验和
+  - Agent 安全约束: 原子写入 (.tmp→rename)、路径穿越防护、50 MiB 限制
+  - Web 页面: FileDistributionPage (`/files`)，含上传表单 + 任务表格
+- **新增 `docs/features/file-distribution/tasks.md`**：7 阶段 40 项实现任务清单
+- **更新 `README.md`**：CI badge、准确测试计数 (Server 50 + Agent 7)、特性列表扩充
+- **更新 `docs/master-plan.md`**：测试计数修正、下一步建议标记 CI 完成
+
+### 📋 Todolist
+
+- [x] Round 19: 文件分发 spec + README 更新 + 测试计数修正
+- [ ] 延期: admin 密码 / 静态 Token
+
 ## 2026-07-09 Round 18 — GitHub Actions CI 接入
 
 ### CI 配置

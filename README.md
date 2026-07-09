@@ -56,16 +56,28 @@ flowchart LR
   Agent1 -->|stdout / stderr / exit code| Server
 ```
 
+## CI
+
+[![CI](https://github.com/cowhorse05/LabOps/actions/workflows/ci.yml/badge.svg)](https://github.com/cowhorse05/LabOps/actions/workflows/ci.yml)
+
+| Module | Tests | Status |
+|--------|-------|--------|
+| Server (Go) | 50 functions | ✅ |
+| Agent (Go) | 7 functions | ✅ |
+| Web (TS) | tsc + build | ✅ |
+
 ## MVP Features
 
 - Device registration and online/offline status
 - Agent heartbeat and inventory reporting
-- Single-device command execution
-- Group command execution
-- Task result tracking
-- Audit log
+- Single-device and batch (group) command execution
+- Task result tracking with stdout/stderr/exit code
+- Dedicated device task API endpoint
+- Audit log with full operation traceability
 - AI Ops intelligent analysis (health scores, threshold alerts, group summaries)
-- Docker-based multi-device demo
+- SQL transaction safety for task lifecycle
+- DB indexes for query performance
+- Docker-based multi-device demo (4 simulated agents)
 
 ## Useful Commands
 

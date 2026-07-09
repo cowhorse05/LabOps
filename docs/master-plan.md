@@ -274,7 +274,8 @@ Status 常量：`online/offline` (设备), `pending/running/success/failed/timeo
 - [x] edge-node: Debian Edge Node, 2C/2G/32G
 - [x] 每种 profile 有独立的 CPU/Memory/Disk 基线 + jitter
 
-**2.4 文件分发** ⏳ (v0.3)
+**2.4 文件分发** 🚧 (v0.3)
+- [x] Design spec: `docs/features/file-distribution/design.md` + `tasks.md`
 - [ ] 上传 + 分发 + SHA-256 校验 + 结果回传
 - [ ] 下载任务产物
 
@@ -294,8 +295,8 @@ Status 常量：`online/offline` (设备), `pending/running/success/failed/timeo
 
 | 测试类型 | 状态 |
 | --- | --- |
-| Server Go 测试 (54 函数) | ✅ 全部通过 (Go 1.26, 3.0s) |
-| Agent Go 测试 (19 函数) | ✅ 全部通过 (Go 1.26, 0.9s) |
+| Server Go 测试 (50 函数) | ✅ 全部通过 (Go 1.26.5, 2.7s) |
+| Agent Go 测试 (7 函数) | ✅ 全部通过 (Go 1.26.5, 1.0s) |
 | 前端 Vitest (1 函数) | ✅ 通过 |
 | 前端 TypeCheck + Build | ✅ 通过 |
 | 演示环境 (Server + Web 直连) | ✅ 可用 (:8090 + :5173) |
@@ -411,6 +412,7 @@ docs/features/<name>/
 | v0.4 | 2026-07-09 | Round 16: SQL 事务包裹 FailTask/CompleteTask、DB 索引优化 (4 indexes)、DeviceDetailPage 专用 API 端点 (`GET /api/devices/{id}/tasks`)。测试计数更新至 Server 54 函数 + Agent 19 函数 |
 | v0.5 | 2026-07-09 | Round 17: handleAgentWS WebSocket 集成测试 (5 新测试函数，含 token auth/register/heartbeat/disconnect)。Server 15 函数 + Agent 19 函数全部通过 |
 | v0.6 | 2026-07-09 | Round 18: GitHub Actions CI workflow (`.github/workflows/ci.yml`)，3 并行 job：Server vet+test (go 1.25)、Agent vet+test (go 1.23)、Web tsc+build (node 20) |
+| v0.7 | 2026-07-09 | Round 19: v0.3 文件分发 design spec + tasks.md、README 更新（CI badge、测试计数、特性列表）、master-plan 测试计数修正 (50+7)、下一步建议标记 |
 
 ## 10. 下一步建议
 
