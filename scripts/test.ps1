@@ -46,11 +46,11 @@ if ($goAvailable) {
     }
 
     Write-Host "Running server tests in container ($runtime)..." -ForegroundColor Cyan
-    & $runtime run --rm -v "${root}\server:/src" -w /src golang:1.23-alpine sh -c "go test ./..."
+    & $runtime run --rm -v "${root}\server:/src" -w /src golang:1.24-alpine sh -c "go test ./..."
     if ($LASTEXITCODE -ne 0) { Write-Host "server tests FAILED" -ForegroundColor Red; exit $LASTEXITCODE }
 
     Write-Host "Running agent tests in container ($runtime)..." -ForegroundColor Cyan
-    & $runtime run --rm -v "${root}\agent:/src" -w /src golang:1.23-alpine sh -c "go test ./..."
+    & $runtime run --rm -v "${root}\agent:/src" -w /src golang:1.24-alpine sh -c "go test ./..."
     if ($LASTEXITCODE -ne 0) { Write-Host "agent tests FAILED" -ForegroundColor Red; exit $LASTEXITCODE }
 }
 
