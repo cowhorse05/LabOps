@@ -57,6 +57,7 @@ func (s *Store) Init(ctx context.Context) error {
 			display_name TEXT NOT NULL,
 			password TEXT NOT NULL,
 			roles TEXT NOT NULL,
+			must_change_password INTEGER NOT NULL DEFAULT 0,
 			created_at TEXT NOT NULL
 		)`,
 		`CREATE TABLE IF NOT EXISTS devices (
@@ -132,12 +133,14 @@ func (s *Store) Init(ctx context.Context) error {
 			return err
 		}
 	}
+	// Migrate: add must_change_password column for existing databases
+	_, _ = s.db.ExecContext(ctx, `ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0`)
 	hashed, err := bcrypt.GenerateFromPassword([]byte("admin"), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT OR IGNORE INTO users (id, username, display_name, password, roles, created_at)
-		VALUES ('user_admin', 'admin', 'LabOps Admin', ?, 'admin,operator', ?)`, string(hashed), nowString())
+	_, err = s.db.ExecContext(ctx, `INSERT OR IGNORE INTO users (id, username, display_name, password, roles, must_change_password, created_at)
+		VALUES ('user_admin', 'admin', 'LabOps Admin', ?, 'admin,operator', 1, ?)`, string(hashed), nowString())
 	return err
 }
 
@@ -162,6 +165,23 @@ func (s *Store) FindUser(ctx context.Context, username, password string) (User, 
 
 func (s *Store) AdminUser() User {
 	return User{ID: "user_admin", Username: "admin", DisplayName: "LabOps Admin", Roles: []string{"admin", "operator"}}
+}
+
+func (s *Store) UpdatePassword(ctx context.Context, username, newPassword string) error {
+	hashed, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx,
+		"UPDATE users SET password = ?, must_change_password = 0 WHERE username = ?",
+		string(hashed), username)
+	return err
+}
+
+func (s *Store) MustChangePassword(ctx context.Context, username string) bool {
+	var must int
+	err := s.db.QueryRowContext(ctx, "SELECT must_change_password FROM users WHERE username = ?", username).Scan(&must)
+	return err == nil && must == 1
 }
 
 func (s *Store) UpsertDevice(ctx context.Context, d Device) error {

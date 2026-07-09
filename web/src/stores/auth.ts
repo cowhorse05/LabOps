@@ -4,9 +4,10 @@ import type { User } from '@/types';
 interface AuthState {
   token: string | null;
   user: User | null;
-  setAuth: (token: string, user: User) => void;
-  setUser: (user: User) => void;
+  mustChangePassword: boolean;
+  setAuth: (token: string, user: User, mustChangePassword?: boolean) => void;
   clear: () => void;
+  setUser: (user: User) => void;
 }
 
 const tokenKey = 'labops.token';
@@ -25,10 +26,11 @@ function readUser() {
 export const useAuthStore = create<AuthState>((set) => ({
   token: localStorage.getItem(tokenKey),
   user: readUser(),
-  setAuth: (token, user) => {
+  mustChangePassword: false,
+  setAuth: (token, user, mustChangePassword = false) => {
     localStorage.setItem(tokenKey, token);
     localStorage.setItem(userKey, JSON.stringify(user));
-    set({ token, user });
+    set({ token, user, mustChangePassword });
   },
   setUser: (user) => {
     localStorage.setItem(userKey, JSON.stringify(user));
@@ -37,6 +39,6 @@ export const useAuthStore = create<AuthState>((set) => ({
   clear: () => {
     localStorage.removeItem(tokenKey);
     localStorage.removeItem(userKey);
-    set({ token: null, user: null });
+    set({ token: null, user: null, mustChangePassword: false });
   },
 }));

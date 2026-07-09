@@ -1,6 +1,6 @@
 # LabOps 开源运维系统计划
 
-> 状态：✅ MVP 已完成，57 个 Go 测试全部通过（Server 50 函数 + Agent 7 函数），Docker Compose 验证通过，5 轮审计修复完成（f067fec, cfbd94e, 45fe65f, R16, R17, R18），AI Ops 已运行，安全加固完成，DB 索引已优化，WebSocket handler 已测试，GitHub Actions CI 已接入 · 日期：2026-07-09
+> 状态：✅ MVP 已完成，57 个 Go 测试全部通过（Server 50 函数 + Agent 7 函数），Docker Compose 验证通过，全部审计修复完成（f067fec, cfbd94e, 45fe65f, R16-R23），AI Ops 已运行，安全加固完成（JWT 会话 / bcrypt / 强制改密 / TOCTOU），DB 索引已优化，WebSocket handler 已测试，GitHub Actions CI 已接入 · 日期：2026-07-09
 > 本文件是 LabOps 项目的总体计划 SSOT（Single Source Of Truth）。各阶段的 design + tasks 拆分见对应 spec 目录。
 > 工作流遵循 OpsService 的 `/spec-impl` 模式，适配 Go/React 技术栈后形成 LabOps 特有惯例。
 

@@ -1,63 +1,109 @@
 import { useState } from 'react';
-import { Button, Form, Input, Typography, App } from 'antd';
-import { LockOutlined, UserOutlined } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
+import { App, Button, Form, Input, Typography } from 'antd';
+import { UserOutlined, LockOutlined } from '@ant-design/icons';
 import { authApi } from '@/api/labops';
 import { useAuthStore } from '@/stores/auth';
 
 export default function LoginPage() {
-  const navigate = useNavigate();
   const { message } = App.useApp();
+  const token = useAuthStore((s) => s.token);
+  const mustChangePwd = useAuthStore((s) => s.mustChangePassword);
   const setAuth = useAuthStore((s) => s.setAuth);
   const [loading, setLoading] = useState(false);
+  const [changing, setChanging] = useState(false);
 
-  async function submit(values: { username: string; password: string }) {
+  // Already logged in and no forced change — go to dashboard
+  if (token && !mustChangePwd) {
+    return <Navigate to="/" replace />;
+  }
+
+  async function handleLogin(values: { username: string; password: string }) {
     setLoading(true);
     try {
       const result = await authApi.login(values.username, values.password);
-      setAuth(result.token, result.user);
-      navigate('/dashboard', { replace: true });
-    } catch (err: unknown) {
-      if (err && typeof err === 'object' && 'response' in err) {
-        const axiosErr = err as { response?: { status?: number } };
-        if (axiosErr.response?.status === 401) {
-          message.error('用户名或密码不正确');
-        } else if (axiosErr.response?.status && axiosErr.response.status >= 500) {
-          message.error('服务器内部错误，请稍后重试');
-        } else {
-          message.error('登录失败，请检查网络连接');
-        }
-      } else {
-        message.error('登录失败：无法连接到服务器');
+      setAuth(result.token, result.user, result.mustChangePassword ?? false);
+      if (result.mustChangePassword) {
+        message.warning('Please change your password before continuing');
       }
+    } catch {
+      message.error('Invalid username or password');
     } finally {
       setLoading(false);
     }
   }
 
+  async function handleChangePassword(values: { oldPassword: string; newPassword: string }) {
+    setChanging(true);
+    try {
+      const result = await authApi.changePassword(values.oldPassword, values.newPassword);
+      // Clear the mustChangePassword flag
+      setAuth(result.token, useAuthStore.getState().user!, false);
+      message.success('Password changed successfully');
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || 'Failed to change password';
+      message.error(msg);
+    } finally {
+      setChanging(false);
+    }
+  }
+
+  // Show change password form if forced
+  if (token && mustChangePwd) {
+    return (
+      <div className="login-page">
+        <div className="login-panel" style={{ maxWidth: 400 }}>
+          <div className="login-mark">P</div>
+          <Typography.Title level={3} style={{ textAlign: 'center' }}>
+            Change Password
+          </Typography.Title>
+          <Typography.Text type="secondary" style={{ display: 'block', textAlign: 'center', marginBottom: 24 }}>
+            You must change your password on first login.
+          </Typography.Text>
+          <Form onFinish={handleChangePassword} className="login-form" size="large">
+            <Form.Item name="oldPassword" rules={[{ required: true, message: 'Enter current password' }]}>
+              <Input.Password prefix={<LockOutlined />} placeholder="Current password" />
+            </Form.Item>
+            <Form.Item name="newPassword" rules={[
+              { required: true, message: 'Enter new password' },
+              { min: 4, message: 'At least 4 characters' },
+            ]}>
+              <Input.Password prefix={<LockOutlined />} placeholder="New password (min 4 chars)" />
+            </Form.Item>
+            <Form.Item>
+              <Button type="primary" htmlType="submit" block loading={changing}>
+                Change Password
+              </Button>
+            </Form.Item>
+          </Form>
+        </div>
+      </div>
+    );
+  }
+
+  // Normal login
   return (
     <div className="login-page">
       <div className="login-panel">
         <div className="login-mark">L</div>
-        <Typography.Title level={2} style={{ margin: 0 }}>
+        <Typography.Title level={3} style={{ textAlign: 'center' }}>
           LabOps
         </Typography.Title>
-        <Typography.Text className="muted">轻量开源运维控制台</Typography.Text>
-        <Form
-          layout="vertical"
-          className="login-form"
-          initialValues={{ username: '', password: '' }}
-          onFinish={submit}
-        >
-          <Form.Item name="username" label="用户名" rules={[{ required: true }]}>
-            <Input size="large" prefix={<UserOutlined />} />
+        <Typography.Text type="secondary" style={{ display: 'block', textAlign: 'center', marginBottom: 24 }}>
+          Lightweight Operations Platform
+        </Typography.Text>
+        <Form onFinish={handleLogin} className="login-form" size="large">
+          <Form.Item name="username" rules={[{ required: true, message: 'Enter username' }]}>
+            <Input prefix={<UserOutlined />} placeholder="Username" autoFocus />
           </Form.Item>
-          <Form.Item name="password" label="密码" rules={[{ required: true }]}>
-            <Input.Password size="large" prefix={<LockOutlined />} />
+          <Form.Item name="password" rules={[{ required: true, message: 'Enter password' }]}>
+            <Input.Password prefix={<LockOutlined />} placeholder="Password" />
           </Form.Item>
-          <Button type="primary" size="large" htmlType="submit" loading={loading} block>
-            登录
-          </Button>
+          <Form.Item>
+            <Button type="primary" htmlType="submit" block loading={loading}>
+              Log in
+            </Button>
+          </Form.Item>
         </Form>
       </div>
     </div>

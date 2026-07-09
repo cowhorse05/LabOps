@@ -2,18 +2,21 @@ package core
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
 )
 
 type Config struct {
 	AgentToken       string
 	WebToken         string
+	JWTSecret        string
 	HeartbeatTimeout time.Duration
 	TaskTimeout      time.Duration
 }
@@ -68,6 +71,9 @@ func NewApp(store *Store, config Config) *App {
 	if config.TaskTimeout == 0 {
 		config.TaskTimeout = 2 * time.Minute
 	}
+	if config.JWTSecret == "" {
+		config.JWTSecret = "labops-jwt-secret-change-in-production"
+	}
 	app := &App{
 		store:        store,
 		config:       config,
@@ -98,6 +104,7 @@ func (a *App) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", a.handleHealth)
 	mux.HandleFunc("POST /api/auth/login", a.handleLogin)
+	mux.HandleFunc("POST /api/auth/change-password", a.handleChangePassword)
 	mux.HandleFunc("GET /api/auth/me", a.handleMe)
 	mux.HandleFunc("GET /api/stats", a.handleStats)
 	mux.HandleFunc("GET /api/devices", a.handleListDevices)
@@ -133,18 +140,44 @@ func (a *App) withCORS(next http.Handler) http.Handler {
 
 func (a *App) withAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodOptions || strings.HasPrefix(r.URL.Path, "/api/agent/") || r.URL.Path == "/api/health" || r.URL.Path == "/api/auth/login" {
+		if r.Method == http.MethodOptions ||
+			strings.HasPrefix(r.URL.Path, "/api/agent/") ||
+			r.URL.Path == "/api/health" ||
+			r.URL.Path == "/api/auth/login" {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if a.config.WebToken == "" {
-			next.ServeHTTP(w, r)
-			return
-		}
-		if r.Header.Get("Authorization") != "Bearer "+a.config.WebToken {
+
+		authHeader := r.Header.Get("Authorization")
+		if !strings.HasPrefix(authHeader, "Bearer ") {
+			// When no WebToken is configured, allow unauthenticated access
+			if a.config.WebToken == "" {
+				next.ServeHTTP(w, r)
+				return
+			}
 			writeError(w, http.StatusUnauthorized, "missing or invalid token")
 			return
 		}
+		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+
+		// Allow the static WebToken for backward compatibility
+		if a.config.WebToken != "" && tokenString == a.config.WebToken {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Validate JWT
+		token, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
+			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+			}
+			return []byte(a.config.JWTSecret), nil
+		})
+		if err != nil || !token.Valid {
+			writeError(w, http.StatusUnauthorized, "missing or invalid token")
+			return
+		}
+
 		next.ServeHTTP(w, r)
 	})
 }

@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type loginRequest struct {
@@ -13,8 +16,14 @@ type loginRequest struct {
 }
 
 type loginResponse struct {
-	Token string `json:"token"`
-	User  User   `json:"user"`
+	Token              string `json:"token"`
+	User               User   `json:"user"`
+	MustChangePassword bool   `json:"mustChangePassword"`
+}
+
+type changePasswordRequest struct {
+	OldPassword string `json:"oldPassword"`
+	NewPassword string `json:"newPassword"`
 }
 
 type createTaskRequest struct {
@@ -41,11 +50,105 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "invalid username or password")
 		return
 	}
-	writeJSON(w, http.StatusOK, loginResponse{Token: a.config.WebToken, User: user})
+
+	// Create JWT with 24h expiry
+	claims := jwt.MapClaims{
+		"sub":      user.ID,
+		"username": user.Username,
+		"iat":      time.Now().Unix(),
+		"exp":      time.Now().Add(24 * time.Hour).Unix(),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString([]byte(a.config.JWTSecret))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to generate token")
+		return
+	}
+
+	// Check if must change password (from DB)
+	mustChange := a.store.MustChangePassword(r.Context(), user.Username)
+
+	writeJSON(w, http.StatusOK, loginResponse{
+		Token:              tokenString,
+		User:               user,
+		MustChangePassword: mustChange,
+	})
 }
 
 func (a *App) handleMe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, a.store.AdminUser())
+}
+
+func (a *App) handleChangePassword(w http.ResponseWriter, r *http.Request) {
+	var req changePasswordRequest
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if req.NewPassword == "" {
+		writeError(w, http.StatusBadRequest, "new password is required")
+		return
+	}
+	if len(req.NewPassword) < 4 {
+		writeError(w, http.StatusBadRequest, "password must be at least 4 characters")
+		return
+	}
+
+	// Get current user from JWT
+	authHeader := r.Header.Get("Authorization")
+	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+
+	// Allow static token for backward compat (use admin user)
+	var username string
+	if tokenString == a.config.WebToken {
+		username = "admin"
+	} else {
+		token, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
+			return []byte(a.config.JWTSecret), nil
+		})
+		if err != nil || !token.Valid {
+			writeError(w, http.StatusUnauthorized, "invalid token")
+			return
+		}
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "invalid token claims")
+			return
+		}
+		username, _ = claims["username"].(string)
+	}
+
+	// Verify old password
+	_, ok, err := a.store.FindUser(r.Context(), username, req.OldPassword)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "old password is incorrect")
+		return
+	}
+
+	// Update password
+	if err := a.store.UpdatePassword(r.Context(), username, req.NewPassword); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Issue new JWT
+	claims := jwt.MapClaims{
+		"sub":      username,
+		"username": username,
+		"iat":      time.Now().Unix(),
+		"exp":      time.Now().Add(24 * time.Hour).Unix(),
+	}
+	newToken := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	newTokenString, err := newToken.SignedString([]byte(a.config.JWTSecret))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to generate token")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"token": newTokenString})
 }
 
 func (a *App) handleStats(w http.ResponseWriter, r *http.Request) {

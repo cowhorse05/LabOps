@@ -1,5 +1,44 @@
 # LabOps 变更日志
 
+## 2026-07-09 Round 23 — JWT 会话 + 首次登录强制改密
+
+### 服务端 (4 files)
+
+- **`go.mod`**: 新增 `github.com/golang-jwt/jwt/v5` 依赖
+- **`store.go`**: users 表新增 `must_change_password` 列；迁移语句兼容旧库；`UpdatePassword` + `MustChangePassword` 方法；admin 种子强制改密
+- **`api.go`**: `handleLogin` 改为签发 JWT (HS256, 24h 过期)；新增 `handleChangePassword` (旧密码验证→更新→新 JWT)；新增 `changePasswordRequest` 类型
+- **`app.go`**: Config 新增 `JWTSecret`（默认随机值）；`withAuth` 重写为 JWT 校验（保留 WebToken 向后兼容）；注册 `POST /api/auth/change-password`
+
+### Web (4 files)
+
+- **`types.ts`**: 新增 `ChangePasswordRequest` 接口
+- **`stores/auth.ts`**: 新增 `mustChangePassword` 状态字段
+- **`api/labops.ts`**: 新增 `changePassword()` API；login 返回值新增 `mustChangePassword`
+- **`LoginPage.tsx`**: 三态重写——已登录直接跳转 / 强制改密表单 / 正常登录
+
+### 设计决策
+
+- **向后兼容**: 静态 WebToken 仍可在 `Authorization: Bearer <token>` 中使用
+- **Agent 路径不变**: Agent WS 认证 (`X-Agent-Token`) 完全独立
+- **24h JWT 过期**: 前端 401 拦截自动跳登录页（已有）
+- **安全迁移**: `ALTER TABLE ADD COLUMN` 忽略已存在列错误
+
+### 测试
+
+| 模块 | 结果 |
+|------|------|
+| server `go test ./...` (50 函数) | ✅ PASS (2.3s) |
+| agent `go test ./...` (7 函数) | ✅ PASS (0.9s) |
+| server `go vet` | ✅ 无警告 |
+| agent `go vet` | ✅ 无警告 |
+| TypeScript `tsc --noEmit` | ✅ 零错误 |
+| Web `npm run build` | ✅ 通过 (6.6s) |
+
+### 📋 Todolist
+
+- [x] Round 23: JWT 会话 + 首次登录强制改密
+- [x] **全部可操作 TODOs 已完成**
+
 ## 2026-07-09 Round 22 — 开源社区文件 + 专业 README
 
 ### 文件

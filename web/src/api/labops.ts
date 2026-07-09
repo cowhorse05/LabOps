@@ -3,11 +3,15 @@ import type { AuditLog, Device, DeviceGroup, DeviceStats, Task, User } from '@/t
 
 export const authApi = {
   async login(username: string, password: string) {
-    const { data } = await api.post<{ token: string; user: User }>('/auth/login', { username, password });
+    const { data } = await api.post<{ token: string; user: User; mustChangePassword?: boolean }>('/auth/login', { username, password });
     return data;
   },
   async me() {
     const { data } = await api.get<User>('/auth/me');
+    return data;
+  },
+  async changePassword(oldPassword: string, newPassword: string) {
+    const { data } = await api.post<{ token: string }>('/auth/change-password', { oldPassword, newPassword });
     return data;
   },
 };

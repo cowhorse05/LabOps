@@ -73,3 +73,8 @@ export interface AuditLog {
   message: string;
   createdAt: string;
 }
+
+export interface ChangePasswordRequest {
+  oldPassword: string;
+  newPassword: string;
+}
