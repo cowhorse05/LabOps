@@ -1,5 +1,31 @@
 # LabOps 变更日志
 
+## 2026-07-09 Round 21 — 最终检查点
+
+### 状态
+
+全部 TODOs 已完成或明确延期。R12-R14 历史清单已更新标记。
+
+### 📋 Todolist
+
+- [x] 全部可操作 TODOs 已完成
+- [ ] 延期: admin 密码 / 静态 Token（架构变更，需独立功能分支）
+
+### 项目总体
+
+| 维度 | 状态 |
+|------|------|
+| Server 50 tests | ✅ |
+| Agent 7 tests | ✅ |
+| go vet ×2 | ✅ |
+| TS tsc + build | ✅ |
+| GitHub Actions CI | ✅ |
+| SQL 事务保护 | ✅ |
+| DB 索引 (4) | ✅ |
+| WS 集成测试 | ✅ |
+| 文件分发 spec | ✅ |
+| 文档 (11 md) | ✅ |
+
 ## 2026-07-09 Round 19 — 文档更新 + v0.3 文件分发 Spec
 
 ### 文档
@@ -226,7 +252,7 @@
 ### 📋 Todolist
 
 - [x] Round 14: 死代码清理 + 文档更新 + Session 测试
-- [ ] agent handler 层 WebSocket 测试（覆盖率 0%）
+- [x] agent handler 层 WebSocket 测试 → Round 17 ✅
 - [ ] 延期: admin 密码 / 静态 Token
 
 ## 2026-07-09 Round 13 — 深度审查 + 协作者 45fe65f 验收
@@ -277,8 +303,8 @@
 ### 📋 Todolist
 
 - [x] Round 13: cfbd94e 审查 + 45fe65f 验收
-- [ ] 清理 `createTaskResponse` 死代码
-- [ ] 文档同步: master-plan/user-manual/README
+- [x] 清理 `createTaskResponse` 死代码 → Round 14 ✅
+- [x] 文档同步: master-plan/user-manual/README → 已同步
 - [ ] 延期: admin 密码 / 静态 Token（需独立功能分支）
 
 ## 2026-07-09 Round 12 — 协作者提交审查 + 主 agent 统筹
