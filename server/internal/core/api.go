@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -517,6 +518,41 @@ func (a *App) handleSaveLLMConfig(w http.ResponseWriter, r *http.Request) {
 	// Trigger immediate re-analysis with the new config
 	go a.analyzer.TriggerRun()
 	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
+}
+
+// handleTestLLM makes a minimal test call to the configured LLM and returns raw request/response.
+func (a *App) handleTestLLM(w http.ResponseWriter, r *http.Request) {
+	// Get current config (DB first, then env)
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	dbCfg, _ := a.store.GetLLMConfig(ctx)
+	url := a.config.LLMURL
+	key := a.config.LLMAPIKey
+	model := "gpt-3.5-turbo"
+	providerType := "openai"
+	if dbCfg.Enabled && dbCfg.ProviderURL != "" {
+		url = dbCfg.ProviderURL
+		key = dbCfg.APIKey
+		if dbCfg.Model != "" {
+			model = dbCfg.Model
+		}
+		if dbCfg.ProviderType != "" {
+			providerType = dbCfg.ProviderType
+		}
+	}
+	if url == "" || key == "" {
+		writeJSON(w, http.StatusOK, LLMTestResult{
+			OK:     false,
+			Status: "not_configured",
+			Error:  "LLM not configured. Please set Provider URL and API Key first.",
+		})
+		return
+	}
+
+	client := NewLLMClient(url, key, model, providerType)
+	result := client.Test(ctx)
+	writeJSON(w, http.StatusOK, result)
 }
 
 // handleExecuteRecommendation creates and dispatches tasks from LLM recommendations.

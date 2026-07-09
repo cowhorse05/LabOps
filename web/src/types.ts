@@ -79,6 +79,18 @@ export interface ChangePasswordRequest {
   newPassword: string;
 }
 
+export interface LLMTestResult {
+  ok: boolean;
+  status: string;
+  requestUrl: string;
+  requestBody: string;
+  reqHeaders: string;
+  respStatus: number;
+  respBody: string;
+  error?: string;
+  modelUsed: string;
+}
+
 export interface AiOpsLLMConfig {
   providerUrl: string;
   apiKey: string;

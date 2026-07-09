@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { AiOpsLLMConfig, AuditLog, Device, DeviceGroup, DeviceStats, LLMRecommendation, Task, User } from '@/types';
+import type { AiOpsLLMConfig, AuditLog, Device, DeviceGroup, DeviceStats, LLMRecommendation, LLMTestResult, Task, User } from '@/types';
 
 export const authApi = {
   async login(username: string, password: string) {
@@ -76,6 +76,10 @@ export const labopsApi = {
   },
   async saveLLMConfig(input: { providerUrl: string; apiKey: string; model: string; providerType: string; enabled: boolean; autoExecuteReadOnly?: boolean }) {
     const { data } = await api.put<{ status: string }>('/aiops/llm-config', input);
+    return data;
+  },
+  async testLLM() {
+    const { data } = await api.post<LLMTestResult>('/aiops/llm-test');
     return data;
   },
   async executeRecommendation(input: { recommendationId?: string; recommendationIds?: string[] }) {

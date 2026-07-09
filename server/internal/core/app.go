@@ -124,6 +124,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/aiops/report", a.handleAiOpsReport)
 	mux.HandleFunc("GET /api/aiops/llm-config", a.handleGetLLMConfig)
 	mux.HandleFunc("PUT /api/aiops/llm-config", a.handleSaveLLMConfig)
+	mux.HandleFunc("POST /api/aiops/llm-test", a.handleTestLLM)
 	mux.HandleFunc("POST /api/aiops/recommendations/execute", a.handleExecuteRecommendation)
 	mux.HandleFunc("GET /api/aiops/auto-mode", a.handleGetAutoMode)
 	mux.HandleFunc("PUT /api/aiops/auto-mode", a.handleSaveAutoMode)

@@ -41,8 +41,10 @@ type openAIResponse struct {
 // --- Anthropic Messages API request/response types ---
 
 type anthropicContent struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
+	Type      string `json:"type"`
+	Text      string `json:"text"`
+	Thinking  string `json:"thinking"`
+	Signature string `json:"signature"`
 }
 
 type anthropicRequest struct {
@@ -68,10 +70,10 @@ type LLMClient struct {
 	http         *http.Client
 }
 
-// useBearerAuth returns true if the provider uses "Authorization: Bearer" (OpenAI, DeepSeek, etc.).
-// Only the native Anthropic API uses "x-api-key".
+// useBearerAuth returns true if the provider uses "Authorization: Bearer" (OpenAI, etc.).
+// Anthropic-compatible endpoints (including DeepSeek's /anthropic) use "x-api-key".
 func (c *LLMClient) useBearerAuth() bool {
-	return c.providerType != "anthropic" || strings.Contains(c.url, "deepseek")
+	return c.providerType != "anthropic"
 }
 
 // NewLLMClient creates an LLM client for the given provider.
@@ -533,6 +535,169 @@ func (c *LLMClient) parseStructuredResponse(raw string, devices []Device) (strin
 // Some LLMs emit literal backslash-n even when told to use real newlines.
 func normalizeNewlines(s string) string {
 	return strings.ReplaceAll(s, "\\n", "\n")
+}
+
+// LLMTestResult contains the raw request/response details from a test call.
+type LLMTestResult struct {
+	OK          bool   `json:"ok"`
+	Status      string `json:"status"`
+	RequestURL  string `json:"requestUrl"`
+	RequestBody string `json:"requestBody"`
+	ReqHeaders  string `json:"reqHeaders"`
+	RespStatus  int    `json:"respStatus"`
+	RespBody    string `json:"respBody"`
+	Error       string `json:"error,omitempty"`
+	ModelUsed   string `json:"modelUsed"`
+}
+
+// Test sends a simple "Hello" message to the LLM and returns raw request/response info.
+func (c *LLMClient) Test(ctx context.Context) LLMTestResult {
+	result := LLMTestResult{
+		ModelUsed: c.model,
+	}
+
+	// Build a minimal test message
+	testMsg := llmMessage{Role: "user", Content: "Hi"}
+
+	switch c.providerType {
+	case "anthropic":
+		return c.testAnthropic(ctx, testMsg, &result)
+	default:
+		return c.testOpenAI(ctx, testMsg, &result)
+	}
+}
+
+func (c *LLMClient) testOpenAI(ctx context.Context, msg llmMessage, result *LLMTestResult) LLMTestResult {
+	body := openAIRequest{
+		Model:       c.model,
+		Messages:    []llmMessage{msg},
+		Temperature: 0,
+		MaxTokens:   500,
+	}
+
+	buf, _ := json.MarshalIndent(body, "", "  ")
+	result.RequestBody = string(buf)
+	result.RequestURL = c.url + "/v1/chat/completions"
+	result.ReqHeaders = "Authorization: Bearer " + maskKey(c.apiKey) + "\nContent-Type: application/json"
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, result.RequestURL, bytes.NewReader(buf))
+	if err != nil {
+		result.Error = err.Error()
+		result.Status = "error"
+		return *result
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		result.Error = err.Error()
+		result.Status = "error"
+		return *result
+	}
+	defer resp.Body.Close()
+
+	respBytes, _ := io.ReadAll(resp.Body)
+	result.RespStatus = resp.StatusCode
+	result.RespBody = string(respBytes)
+
+	if resp.StatusCode >= 400 {
+		result.OK = false
+		result.Status = "failed"
+		result.Error = fmt.Sprintf("HTTP %d", resp.StatusCode)
+		return *result
+	}
+
+	var llmResp openAIResponse
+	if err := json.Unmarshal(respBytes, &llmResp); err != nil {
+		result.OK = false
+		result.Status = "failed"
+		result.Error = fmt.Sprintf("JSON decode error: %v", err)
+		return *result
+	}
+	if llmResp.Error != nil {
+		result.OK = false
+		result.Status = "failed"
+		result.Error = fmt.Sprintf("API error: %s (%s)", llmResp.Error.Message, llmResp.Error.Type)
+		return *result
+	}
+
+	result.OK = true
+	result.Status = "ok"
+	return *result
+}
+
+func (c *LLMClient) testAnthropic(ctx context.Context, msg llmMessage, result *LLMTestResult) LLMTestResult {
+	body := anthropicRequest{
+		Model:     c.model,
+		MaxTokens: 500,
+		Messages:  []llmMessage{msg},
+	}
+
+	buf, _ := json.MarshalIndent(body, "", "  ")
+	result.RequestBody = string(buf)
+	result.RequestURL = c.url + "/v1/messages"
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, result.RequestURL, bytes.NewReader(buf))
+	if err != nil {
+		result.Error = err.Error()
+		result.Status = "error"
+		return *result
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if c.useBearerAuth() {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+		result.ReqHeaders = "Authorization: Bearer " + maskKey(c.apiKey) + "\nContent-Type: application/json"
+	} else {
+		req.Header.Set("x-api-key", c.apiKey)
+		req.Header.Set("anthropic-version", "2023-06-01")
+		result.ReqHeaders = "x-api-key: " + maskKey(c.apiKey) + "\nanthropic-version: 2023-06-01\nContent-Type: application/json"
+	}
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		result.Error = err.Error()
+		result.Status = "error"
+		return *result
+	}
+	defer resp.Body.Close()
+
+	respBytes, _ := io.ReadAll(resp.Body)
+	result.RespStatus = resp.StatusCode
+	result.RespBody = string(respBytes)
+
+	if resp.StatusCode >= 400 {
+		result.OK = false
+		result.Status = "failed"
+		result.Error = fmt.Sprintf("HTTP %d", resp.StatusCode)
+		return *result
+	}
+
+	var llmResp anthropicResponse
+	if err := json.Unmarshal(respBytes, &llmResp); err != nil {
+		result.OK = false
+		result.Status = "failed"
+		result.Error = fmt.Sprintf("JSON decode error: %v", err)
+		return *result
+	}
+	if llmResp.Error != nil {
+		result.OK = false
+		result.Status = "failed"
+		result.Error = fmt.Sprintf("API error: %s (%s)", llmResp.Error.Message, llmResp.Error.Type)
+		return *result
+	}
+
+	result.OK = true
+	result.Status = "ok"
+	return *result
+}
+
+// maskKey returns a masked API key showing only first 7 and last 4 chars.
+func maskKey(key string) string {
+	if len(key) <= 11 {
+		return "****"
+	}
+	return key[:7] + "****" + key[len(key)-4:]
 }
 
 // isDangerousCommand returns true if the command looks destructive.

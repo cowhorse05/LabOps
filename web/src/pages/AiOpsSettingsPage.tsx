@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Alert, App, Button, Card, Form, Input, Select, Switch, Typography } from 'antd';
-import { RobotOutlined, SaveOutlined } from '@ant-design/icons';
+import { Alert, App, Button, Card, Collapse, Form, Input, Select, Space, Switch, Tag, Typography } from 'antd';
+import { RobotOutlined, SaveOutlined, ApiOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import { labopsApi } from '@/api/labops';
-import type { AiOpsLLMConfig } from '@/types';
+import type { AiOpsLLMConfig, LLMTestResult } from '@/types';
 
 export default function AiOpsSettingsPage() {
   const { message } = App.useApp();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [config, setConfig] = useState<AiOpsLLMConfig | null>(null);
+  const [testResult, setTestResult] = useState<LLMTestResult | null>(null);
   const [form] = Form.useForm();
 
   useEffect(() => {
@@ -64,6 +66,24 @@ export default function AiOpsSettingsPage() {
     }
   }
 
+  async function handleTest() {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const result = await labopsApi.testLLM();
+      setTestResult(result);
+      if (result.ok) {
+        message.success('LLM 连接测试通过！');
+      } else {
+        message.error(result.error || 'LLM 连接测试失败');
+      }
+    } catch {
+      message.error('测试请求失败，请检查网络');
+    } finally {
+      setTesting(false);
+    }
+  }
+
   return (
     <div className="page">
       <div className="page-head">
@@ -97,12 +117,12 @@ export default function AiOpsSettingsPage() {
           <Form.Item
             name="providerType"
             label="API 类型"
-            extra="OpenAI: 使用 /v1/chat/completions, Bearer Token 认证&#10;Anthropic: 使用 /v1/messages, x-api-key 认证"
+            extra="OpenAI: 使用 /v1/chat/completions, Bearer Token 认证 · Anthropic: 使用 /v1/messages, x-api-key 认证"
           >
             <Select
               options={[
                 { label: 'OpenAI 兼容（DeepSeek / Ollama / vLLM / ...）', value: 'openai' },
-                { label: 'Anthropic 兼容（Claude / ...）', value: 'anthropic' },
+                { label: 'Anthropic 兼容（Claude / DeepSeek Anthropic / ...）', value: 'anthropic' },
               ]}
             />
           </Form.Item>
@@ -111,7 +131,7 @@ export default function AiOpsSettingsPage() {
             name="providerUrl"
             label="Provider URL"
             rules={[{ type: 'url', message: '请输入有效的 URL' }]}
-            extra="仅需填写 Base URL（不含具体路径）。例如: https://api.deepseek.com 或 https://api.anthropic.com"
+            extra="仅需填写 Base URL（不含具体路径）。例如: https://api.deepseek.com 或 https://api.deepseek.com/anthropic"
           >
             <Input placeholder="https://api.deepseek.com" />
           </Form.Item>
@@ -119,7 +139,7 @@ export default function AiOpsSettingsPage() {
           <Form.Item
             name="model"
             label="模型名称"
-            extra="OpenAI: gpt-4o, deepseek-chat ｜ Anthropic: claude-sonnet-4-6, claude-opus-4-8"
+            extra="OpenAI: gpt-4o, deepseek-chat ｜ Anthropic: claude-sonnet-4-6, deepseek-v4-pro[1M]"
           >
             <Input placeholder="deepseek-chat" />
           </Form.Item>
@@ -142,12 +162,81 @@ export default function AiOpsSettingsPage() {
           </Form.Item>
 
           <Form.Item>
-            <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={saving}>
-              保存配置
-            </Button>
+            <Space>
+              <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={saving}>
+                保存配置
+              </Button>
+              <Button icon={<ApiOutlined />} loading={testing} onClick={handleTest}>
+                测试连接
+              </Button>
+            </Space>
           </Form.Item>
         </Form>
       </Card>
+
+      {testResult && (
+        <Card
+          title={
+            <Space>
+              {testResult.ok ? (
+                <Tag icon={<CheckCircleOutlined />} color="success">连接成功</Tag>
+              ) : (
+                <Tag icon={<CloseCircleOutlined />} color="error">连接失败</Tag>
+              )}
+              <Typography.Text type="secondary">模型: {testResult.modelUsed}</Typography.Text>
+            </Space>
+          }
+          style={{ maxWidth: 640, marginTop: 16 }}
+        >
+          <Collapse
+            size="small"
+            items={[
+              {
+                key: 'request',
+                label: '请求详情',
+                children: (
+                  <div>
+                    <Typography.Text strong>URL: </Typography.Text>
+                    <Typography.Text code style={{ wordBreak: 'break-all' }}>{testResult.requestUrl}</Typography.Text>
+                    <br /><br />
+                    <Typography.Text strong>Headers:</Typography.Text>
+                    <pre style={{ background: '#f5f5f5', padding: 8, borderRadius: 4, fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                      {testResult.reqHeaders}
+                    </pre>
+                    <Typography.Text strong>Request Body:</Typography.Text>
+                    <pre style={{ background: '#f5f5f5', padding: 8, borderRadius: 4, fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 300, overflow: 'auto' }}>
+                      {testResult.requestBody}
+                    </pre>
+                  </div>
+                ),
+              },
+              {
+                key: 'response',
+                label: `响应 (HTTP ${testResult.respStatus})`,
+                children: (
+                  <div>
+                    {testResult.error && (
+                      <Alert type="error" message={testResult.error} style={{ marginBottom: 12 }} />
+                    )}
+                    <Typography.Text strong>Response Body:</Typography.Text>
+                    <pre style={{ background: '#f5f5f5', padding: 8, borderRadius: 4, fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 400, overflow: 'auto' }}>
+                      {formatJSON(testResult.respBody)}
+                    </pre>
+                  </div>
+                ),
+              },
+            ]}
+          />
+        </Card>
+      )}
     </div>
   );
+}
+
+function formatJSON(raw: string): string {
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2);
+  } catch {
+    return raw;
+  }
 }
