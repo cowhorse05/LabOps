@@ -2,9 +2,13 @@ package core
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 // ---------------------------------------------------------------------------
@@ -585,5 +589,466 @@ func TestNewAppDefaults(t *testing.T) {
 	}
 	if !app.upgrader.CheckOrigin(nil) {
 		t.Error("CheckOrigin should return true")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// handleAgentWS – WebSocket integration tests
+// ---------------------------------------------------------------------------
+
+func TestHandleAgentWS_TokenAuth(t *testing.T) {
+	t.Parallel()
+
+	t.Run("missing token returns 401", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+		store, err := OpenStore(":memory:")
+		if err != nil {
+			t.Fatalf("OpenStore: %v", err)
+		}
+		defer store.Close()
+		if err := store.Init(ctx); err != nil {
+			t.Fatalf("Init: %v", err)
+		}
+		app := NewApp(store, Config{AgentToken: "test-token"})
+		defer app.Stop()
+
+		srv := httptest.NewServer(app.Handler())
+		defer srv.Close()
+
+		req, _ := http.NewRequest("GET", srv.URL+"/api/agent/ws", nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("wrong token returns 401", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+		store, err := OpenStore(":memory:")
+		if err != nil {
+			t.Fatalf("OpenStore: %v", err)
+		}
+		defer store.Close()
+		if err := store.Init(ctx); err != nil {
+			t.Fatalf("Init: %v", err)
+		}
+		app := NewApp(store, Config{AgentToken: "correct-token"})
+		defer app.Stop()
+
+		srv := httptest.NewServer(app.Handler())
+		defer srv.Close()
+
+		req, _ := http.NewRequest("GET", srv.URL+"/api/agent/ws", nil)
+		req.Header.Set("X-Agent-Token", "wrong-token")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("valid token upgrades successfully", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+		store, err := OpenStore(":memory:")
+		if err != nil {
+			t.Fatalf("OpenStore: %v", err)
+		}
+		defer store.Close()
+		if err := store.Init(ctx); err != nil {
+			t.Fatalf("Init: %v", err)
+		}
+		app := NewApp(store, Config{AgentToken: "valid-token"})
+		defer app.Stop()
+
+		srv := httptest.NewServer(app.Handler())
+		defer srv.Close()
+
+		wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/api/agent/ws"
+		header := http.Header{}
+		header.Set("X-Agent-Token", "valid-token")
+		conn, resp, err := websocket.DefaultDialer.Dial(wsURL, header)
+		if err != nil {
+			t.Fatalf("dial: %v (status: %d)", err, resp.StatusCode)
+		}
+		defer conn.Close()
+
+		if resp.StatusCode != http.StatusSwitchingProtocols {
+			t.Fatalf("expected 101 Switching Protocols, got %d", resp.StatusCode)
+		}
+	})
+}
+
+func TestHandleAgentWS_Register(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store, err := OpenStore(":memory:")
+	if err != nil {
+		t.Fatalf("OpenStore: %v", err)
+	}
+	defer store.Close()
+	if err := store.Init(ctx); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	app := NewApp(store, Config{AgentToken: "reg-token"})
+	defer app.Stop()
+
+	srv := httptest.NewServer(app.Handler())
+	defer srv.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/api/agent/ws"
+	header := http.Header{}
+	header.Set("X-Agent-Token", "reg-token")
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, header)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+
+	// Send register message.
+	registerMsg := map[string]any{
+		"type": "register",
+		"payload": map[string]any{
+			"agentId":   "dev-ws-1",
+			"name":      "ws-agent-1",
+			"groupName": "ws-group",
+			"hostname":  "ws-agent-1.local",
+			"os":        "linux",
+			"ip":        "10.0.0.100",
+		},
+	}
+	if err := conn.WriteJSON(registerMsg); err != nil {
+		t.Fatalf("write register: %v", err)
+	}
+
+	// Read registered response.
+	var response map[string]any
+	if err := conn.ReadJSON(&response); err != nil {
+		t.Fatalf("read response: %v", err)
+	}
+	if response["type"] != "registered" {
+		t.Fatalf("expected type 'registered', got %q", response["type"])
+	}
+	payload, ok := response["payload"].(map[string]any)
+	if !ok {
+		t.Fatal("payload is missing or not an object")
+	}
+	deviceID, ok := payload["deviceId"].(string)
+	if !ok || deviceID == "" {
+		t.Fatalf("expected non-empty deviceId in payload, got %v", payload["deviceId"])
+	}
+	if deviceID != "dev-ws-1" {
+		t.Fatalf("expected deviceId 'dev-ws-1', got %q", deviceID)
+	}
+
+	// Verify device was created in store.
+	dev, found, err := store.GetDevice(ctx, "dev-ws-1")
+	if err != nil {
+		t.Fatalf("GetDevice: %v", err)
+	}
+	if !found {
+		t.Fatal("device not found in store after register")
+	}
+	if dev.Name != "ws-agent-1" {
+		t.Errorf("device name = %q, want %q", dev.Name, "ws-agent-1")
+	}
+	if dev.Status != StatusOnline {
+		t.Errorf("device status = %q, want %q", dev.Status, StatusOnline)
+	}
+	if dev.GroupName != "ws-group" {
+		t.Errorf("device group = %q, want %q", dev.GroupName, "ws-group")
+	}
+
+	// Verify audit log was created.
+	logs, err := store.ListAudit(ctx)
+	if err != nil {
+		t.Fatalf("ListAudit: %v", err)
+	}
+	foundRegister := false
+	for _, l := range logs {
+		if l.Action == "agent.register" && l.DeviceID == "dev-ws-1" && l.Status == StatusSuccess {
+			foundRegister = true
+			break
+		}
+	}
+	if !foundRegister {
+		t.Fatal("expected agent.register audit log entry")
+	}
+}
+
+func TestHandleAgentWS_InvalidRegister(t *testing.T) {
+	t.Parallel()
+
+	t.Run("first message wrong type", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+		store, err := OpenStore(":memory:")
+		if err != nil {
+			t.Fatalf("OpenStore: %v", err)
+		}
+		defer store.Close()
+		if err := store.Init(ctx); err != nil {
+			t.Fatalf("Init: %v", err)
+		}
+		app := NewApp(store, Config{AgentToken: "inv-token"})
+		defer app.Stop()
+
+		srv := httptest.NewServer(app.Handler())
+		defer srv.Close()
+
+		wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/api/agent/ws"
+		header := http.Header{}
+		header.Set("X-Agent-Token", "inv-token")
+		conn, _, err := websocket.DefaultDialer.Dial(wsURL, header)
+		if err != nil {
+			t.Fatalf("dial: %v", err)
+		}
+		defer conn.Close()
+
+		// Send heartbeat as first message — should be rejected.
+		heartbeatMsg := map[string]any{
+			"type":    "heartbeat",
+			"payload": map[string]any{},
+		}
+		if err := conn.WriteJSON(heartbeatMsg); err != nil {
+			t.Fatalf("write heartbeat: %v", err)
+		}
+
+		var response map[string]any
+		if err := conn.ReadJSON(&response); err != nil {
+			t.Fatalf("read response: %v", err)
+		}
+		if response["type"] != "error" {
+			t.Fatalf("expected type 'error', got %q", response["type"])
+		}
+		msg, _ := response["message"].(string)
+		if !strings.Contains(msg, "first message must be register") {
+			t.Errorf("expected error about register, got %q", msg)
+		}
+	})
+
+	t.Run("missing agentId and name", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+		store, err := OpenStore(":memory:")
+		if err != nil {
+			t.Fatalf("OpenStore: %v", err)
+		}
+		defer store.Close()
+		if err := store.Init(ctx); err != nil {
+			t.Fatalf("Init: %v", err)
+		}
+		app := NewApp(store, Config{AgentToken: "inv-token"})
+		defer app.Stop()
+
+		srv := httptest.NewServer(app.Handler())
+		defer srv.Close()
+
+		wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/api/agent/ws"
+		header := http.Header{}
+		header.Set("X-Agent-Token", "inv-token")
+		conn, _, err := websocket.DefaultDialer.Dial(wsURL, header)
+		if err != nil {
+			t.Fatalf("dial: %v", err)
+		}
+		defer conn.Close()
+
+		// Send register with empty agentId and name.
+		registerMsg := map[string]any{
+			"type": "register",
+			"payload": map[string]any{
+				"agentId": "",
+				"name":    "",
+			},
+		}
+		if err := conn.WriteJSON(registerMsg); err != nil {
+			t.Fatalf("write register: %v", err)
+		}
+
+		var response map[string]any
+		if err := conn.ReadJSON(&response); err != nil {
+			t.Fatalf("read response: %v", err)
+		}
+		if response["type"] != "error" {
+			t.Fatalf("expected type 'error', got %q", response["type"])
+		}
+		msg, _ := response["message"].(string)
+		if !strings.Contains(msg, "agentId and name are required") {
+			t.Errorf("expected error about required fields, got %q", msg)
+		}
+	})
+}
+
+func TestHandleAgentWS_Heartbeat(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store, err := OpenStore(":memory:")
+	if err != nil {
+		t.Fatalf("OpenStore: %v", err)
+	}
+	defer store.Close()
+	if err := store.Init(ctx); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	app := NewApp(store, Config{AgentToken: "hb-token", HeartbeatTimeout: 35 * time.Second})
+	defer app.Stop()
+
+	srv := httptest.NewServer(app.Handler())
+	defer srv.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/api/agent/ws"
+	header := http.Header{}
+	header.Set("X-Agent-Token", "hb-token")
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, header)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+
+	// Register.
+	registerMsg := map[string]any{
+		"type": "register",
+		"payload": map[string]any{
+			"agentId": "dev-hb-1",
+			"name":    "hb-agent",
+		},
+	}
+	if err := conn.WriteJSON(registerMsg); err != nil {
+		t.Fatalf("write register: %v", err)
+	}
+	var regResponse map[string]any
+	if err := conn.ReadJSON(&regResponse); err != nil {
+		t.Fatalf("read register response: %v", err)
+	}
+	if regResponse["type"] != "registered" {
+		t.Fatalf("expected registered, got %q", regResponse["type"])
+	}
+
+	// Send heartbeat.
+	heartbeatMsg := map[string]any{
+		"type": "heartbeat",
+		"payload": map[string]any{
+			"cpuUsage":    45.5,
+			"memoryUsage": 60.0,
+		},
+	}
+	if err := conn.WriteJSON(heartbeatMsg); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+
+	// Give the handler time to process the heartbeat.
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify device heartbeat was updated.
+	dev, found, err := store.GetDevice(ctx, "dev-hb-1")
+	if err != nil {
+		t.Fatalf("GetDevice: %v", err)
+	}
+	if !found {
+		t.Fatal("device not found after heartbeat")
+	}
+	if dev.LastSeen == "" {
+		t.Error("lastSeen should not be empty after heartbeat")
+	}
+	if dev.CPUUsage != 45.5 {
+		t.Errorf("cpuUsage = %f, want 45.5", dev.CPUUsage)
+	}
+	if dev.MemoryUsage != 60.0 {
+		t.Errorf("memoryUsage = %f, want 60.0", dev.MemoryUsage)
+	}
+}
+
+func TestHandleAgentWS_Disconnect(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store, err := OpenStore(":memory:")
+	if err != nil {
+		t.Fatalf("OpenStore: %v", err)
+	}
+	defer store.Close()
+	if err := store.Init(ctx); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	app := NewApp(store, Config{AgentToken: "dc-token"})
+	defer app.Stop()
+
+	srv := httptest.NewServer(app.Handler())
+	defer srv.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/api/agent/ws"
+	header := http.Header{}
+	header.Set("X-Agent-Token", "dc-token")
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, header)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+
+	// Register.
+	registerMsg := map[string]any{
+		"type": "register",
+		"payload": map[string]any{
+			"agentId": "dev-dc-1",
+			"name":    "dc-agent",
+		},
+	}
+	if err := conn.WriteJSON(registerMsg); err != nil {
+		t.Fatalf("write register: %v", err)
+	}
+	var regResponse map[string]any
+	if err := conn.ReadJSON(&regResponse); err != nil {
+		t.Fatalf("read register response: %v", err)
+	}
+	if regResponse["type"] != "registered" {
+		t.Fatalf("expected registered, got %q", regResponse["type"])
+	}
+
+	// Close the connection.
+	if err := conn.Close(); err != nil {
+		t.Fatalf("close connection: %v", err)
+	}
+
+	// Wait briefly for cleanup goroutines to run.
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify device is offline.
+	dev, found, err := store.GetDevice(ctx, "dev-dc-1")
+	if err != nil {
+		t.Fatalf("GetDevice: %v", err)
+	}
+	if !found {
+		t.Fatal("device not found after disconnect")
+	}
+	if dev.Status != StatusOffline {
+		t.Errorf("device status = %q, want %q", dev.Status, StatusOffline)
+	}
+
+	// Verify audit log has disconnect entry.
+	logs, err := store.ListAudit(ctx)
+	if err != nil {
+		t.Fatalf("ListAudit: %v", err)
+	}
+	foundDisconnect := false
+	for _, l := range logs {
+		if l.Action == "agent.disconnect" && l.DeviceID == "dev-dc-1" && l.Status == StatusOffline {
+			foundDisconnect = true
+			break
+		}
+	}
+	if !foundDisconnect {
+		t.Fatal("expected agent.disconnect audit log entry")
 	}
 }

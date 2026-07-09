@@ -1,5 +1,38 @@
 # LabOps 变更日志
 
+## 2026-07-09 Round 17 — handleAgentWS WebSocket 集成测试
+
+### 测试
+
+新增 `agent_test.go` 中 5 个 WebSocket 集成测试（使用 `httptest.NewServer` + `gorilla/websocket.Dialer`）：
+
+| 测试 | Subtests | 覆盖场景 |
+|------|----------|---------|
+| `TestHandleAgentWS_TokenAuth` | 3 | 缺失 token → 401；错误 token → 401；正确 token → 升级成功 |
+| `TestHandleAgentWS_Register` | — | 完整注册流程：连接→发送 register→读取 registered→验证 store 中 device+sesssion |
+| `TestHandleAgentWS_InvalidRegister` | 2 | 首条消息非 register 返回 error；空 agentId/name 返回 error |
+| `TestHandleAgentWS_Heartbeat` | — | 注册后发送 heartbeat→验证 last_seen + cpu/memory/disk 指标更新 |
+| `TestHandleAgentWS_Disconnect` | — | 注册→关闭连接→验证 device 变 offline + audit log 有 disconnect 记录 |
+
+`newTestAppWS` / `wsDial` / `wsWrite` / `wsRead` helper 减少样板代码。
+
+**handleAgentWS 覆盖率**: 0% → 关键路径已覆盖（token auth、register、heartbeat、disconnect cleanup）。
+
+### 测试
+
+| 模块 | 结果 |
+|------|------|
+| server `go test ./...` | ✅ PASS (2.69s), 15 测试函数 |
+| agent `go test ./...` | ✅ PASS (0.95s) |
+| server `go vet` | ✅ 无警告 |
+| agent `go vet` | ✅ 无警告 |
+| TypeScript `tsc --noEmit` | ✅ 零错误 |
+
+### 📋 Todolist
+
+- [x] Round 17: handleAgentWS WebSocket 集成测试
+- [ ] 延期: admin 密码 / 静态 Token（架构级变更）
+
 ## 2026-07-09 Round 16 — 审计中等修复：事务/索引/API 端点
 
 ### 修复
@@ -45,7 +78,7 @@
 ### 📋 Todolist
 
 - [x] Round 16: SQL 事务 + DB 索引 + DeviceDetailPage API 端点
-- [ ] agent handler 层 WebSocket 测试（handleAgentWS 0%）
+- [x] agent handler 层 WebSocket 测试（handleAgentWS） → Round 17
 - [ ] 延期: admin 密码 / 静态 Token
 
 ## 2026-07-09 Round 15 — agent.go handler 层测试 + 最终审计
