@@ -408,8 +408,6 @@ func (a *App) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 		task.DeviceName = device.Name
 		if err := a.dispatchTask(r.Context(), task); err != nil {
 			errs = append(errs, fmt.Sprintf("%s: dispatch failed: %v", device.Name, err))
-			task.Status = StatusFailed
-			tasks = append(tasks, task)
 			continue
 		}
 		fresh, ok, err := a.store.GetTask(r.Context(), task.ID)

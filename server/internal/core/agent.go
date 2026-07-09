@@ -207,16 +207,14 @@ func (a *App) dispatchTask(ctx context.Context, task Task) error {
 	client := a.clients[task.DeviceID]
 	a.mu.RUnlock()
 	if client == nil {
-		_ = a.store.FailTask(ctx, task.ID, "device offline or agent not connected")
-		_ = a.store.CreateAudit(ctx, AuditLog{
+		return a.store.CreateAudit(ctx, AuditLog{
 			Actor:    task.RequestedBy,
 			Action:   "command.queue",
 			DeviceID: task.DeviceID,
 			TaskID:   task.ID,
-			Status:   StatusFailed,
-			Message:  "device offline or agent not connected",
+			Status:   StatusPending,
+			Message:  auditMessage(task.Command),
 		})
-		return fmt.Errorf("device %s is offline or agent not connected", task.DeviceID)
 	}
 	if err := a.store.MarkTaskRunning(ctx, task.ID); err != nil {
 		return err
@@ -254,16 +252,12 @@ func (a *App) dispatchPendingTasks(ctx context.Context, deviceID string) error {
 	if err != nil {
 		return err
 	}
-	var firstErr error
 	for _, task := range tasks {
 		if err := a.dispatchTask(ctx, task); err != nil {
-			if firstErr == nil {
-				firstErr = err
-			}
 			log.Printf("failed to dispatch pending task %s: %v", task.ID, err)
 		}
 	}
-	return firstErr
+	return nil
 }
 
 func deviceFromRegister(reg RegisterPayload) Device {
