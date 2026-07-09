@@ -9,6 +9,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /out/labops-server ./cmd/server
 FROM alpine:3.20
 
 RUN addgroup -S labops && adduser -S labops -G labops
+RUN apk add --no-cache wget
 WORKDIR /app
 COPY --from=build /out/labops-server /app/labops-server
 RUN mkdir -p /data && chown -R labops:labops /data /app
