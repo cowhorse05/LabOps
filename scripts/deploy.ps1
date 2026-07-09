@@ -121,12 +121,13 @@ $env:LABOPS_WEB_TOKEN = "change-me-web-token"
 function Deploy-Compose {
     Write-Step "Deploying with Podman/Docker Compose"
 
-    if (Get-Command docker -ErrorAction SilentlyContinue) {
-        $runtime = "docker"
-    } elseif (Get-Command podman -ErrorAction SilentlyContinue) {
+    # Prefer podman, fallback to docker
+    if (Get-Command podman -ErrorAction SilentlyContinue) {
         $runtime = "podman"
+    } elseif (Get-Command docker -ErrorAction SilentlyContinue) {
+        $runtime = "docker"
     } else {
-        throw "Neither docker nor podman found. Install one or use -Mode native."
+        throw "Neither podman nor docker found. Install one or use -Mode native."
     }
     Write-Info "Using: $runtime"
 

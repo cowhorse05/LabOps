@@ -234,13 +234,13 @@ AGENTEOF
 deploy_compose() {
   step "Deploying with Docker/Podman Compose"
 
-  # Detect runtime
-  if command -v docker &>/dev/null; then
-    RUNTIME="docker"
-  elif command -v podman &>/dev/null; then
+  # Detect runtime: prefer podman, fallback to docker
+  if command -v podman &>/dev/null; then
     RUNTIME="podman"
+  elif command -v docker &>/dev/null; then
+    RUNTIME="docker"
   else
-    err "Neither docker nor podman found. Install one or use --mode native."
+    err "Neither podman nor docker found. Install one or use --mode native."
   fi
 
   # Create .env from example if missing

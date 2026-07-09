@@ -3,5 +3,16 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
-Write-Host "Stopping LabOps demo..." -ForegroundColor Cyan
-podman compose down
+# Detect container runtime: prefer podman, fallback to docker
+if (Get-Command podman -ErrorAction SilentlyContinue) {
+    $runtime = "podman"
+} elseif (Get-Command docker -ErrorAction SilentlyContinue) {
+    $runtime = "docker"
+} else {
+    Write-Host "ERROR: Neither podman nor docker found." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host "Using container runtime: $runtime" -ForegroundColor Cyan
+Write-Host "Stopping LabOps demo..."
+& $runtime compose down

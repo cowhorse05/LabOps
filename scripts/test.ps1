@@ -35,13 +35,23 @@ if ($goAvailable) {
   if ($LASTEXITCODE -ne 0) { Write-Host "agent tests FAILED" -ForegroundColor Red; Pop-Location; exit $LASTEXITCODE }
   Pop-Location
 } else {
-  Write-Host "Running server tests in Docker..." -ForegroundColor Cyan
-  docker run --rm -v "${root}\server:/src" -w /src golang:1.23-alpine sh -c "go test ./..."
-  if ($LASTEXITCODE -ne 0) { Write-Host "server tests FAILED" -ForegroundColor Red; exit $LASTEXITCODE }
+    # Detect container runtime for fallback test runner: prefer podman, fallback to docker
+    if (Get-Command podman -ErrorAction SilentlyContinue) {
+        $runtime = "podman"
+    } elseif (Get-Command docker -ErrorAction SilentlyContinue) {
+        $runtime = "docker"
+    } else {
+        Write-Host "ERROR: Neither podman nor docker found for containerized tests." -ForegroundColor Red
+        exit 1
+    }
 
-  Write-Host "Running agent tests in Docker..." -ForegroundColor Cyan
-  docker run --rm -v "${root}\agent:/src" -w /src golang:1.23-alpine sh -c "go test ./..."
-  if ($LASTEXITCODE -ne 0) { Write-Host "agent tests FAILED" -ForegroundColor Red; exit $LASTEXITCODE }
+    Write-Host "Running server tests in container ($runtime)..." -ForegroundColor Cyan
+    & $runtime run --rm -v "${root}\server:/src" -w /src golang:1.23-alpine sh -c "go test ./..."
+    if ($LASTEXITCODE -ne 0) { Write-Host "server tests FAILED" -ForegroundColor Red; exit $LASTEXITCODE }
+
+    Write-Host "Running agent tests in container ($runtime)..." -ForegroundColor Cyan
+    & $runtime run --rm -v "${root}\agent:/src" -w /src golang:1.23-alpine sh -c "go test ./..."
+    if ($LASTEXITCODE -ne 0) { Write-Host "agent tests FAILED" -ForegroundColor Red; exit $LASTEXITCODE }
 }
 
 Write-Host "All checks completed." -ForegroundColor Green

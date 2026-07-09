@@ -5,13 +5,13 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-# Detect container runtime
-if command -v docker &>/dev/null; then
-  RUNTIME="docker"
-elif command -v podman &>/dev/null; then
+# Detect container runtime: prefer podman, fallback to docker
+if command -v podman &>/dev/null; then
   RUNTIME="podman"
+elif command -v docker &>/dev/null; then
+  RUNTIME="docker"
 else
-  echo "ERROR: Neither docker nor podman found. Please install one of them." >&2
+  echo "ERROR: Neither podman nor docker found. Please install one of them." >&2
   exit 1
 fi
 
