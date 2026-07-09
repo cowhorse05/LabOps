@@ -1,0 +1,23 @@
+server/internal/core/agent.go
+  s_fefbd82d9ae919::t_9f2594817d6491 210,215-216
+  s_fefbd82d9ae919::t_5228c61b6e8274 260
+server/internal/core/agent_test.go
+  s_fefbd82d9ae919::t_733cd48653f764 343-346,360-361,416
+  s_fefbd82d9ae919::t_b538e833a2e70e 413,415,417-421,423-424
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.33-trip",
+  "base_commit_sha": "6fdbe36c598d1349d7f0dd884612a6ca9a7b53f5",
+  "prompts": {},
+  "sessions": {
+    "s_fefbd82d9ae919": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "380db331-6143-493b-8004-7e56a8ea5b17",
+        "model": "deepseek-v4-pro"
+      },
+      "human_author": "Yufeng Li （李裕峰） <li.yufeng@trip.com>"
+    }
+  }
+}
