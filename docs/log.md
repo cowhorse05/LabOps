@@ -1,5 +1,26 @@
 # LabOps 变更日志
 
+## 2026-07-09 Round 22 — 开源社区文件 + 专业 README
+
+### 文件
+
+- **重写 `README.md`**：专业开源项目风格
+  - Badge 行 (CI/Go/License/Tests/PRs)
+  - ✨ 特性列表 (14 项，emoji)
+  - 🚀 Quick Start (3 步启动)
+  - 🏗️ 架构图 (Mermaid + ASCII 数据流)
+  - 📡 API 概览表 (14 端点)
+  - 🛠️ 技术栈表 (8 层)
+  - 📂 项目结构树 + 文档链接
+- **新增 `CONTRIBUTING.md`**：贡献指南（开发设置、测试、代码风格、PR 流程）
+- **新增 `SECURITY.md`**：安全策略（支持版本、漏洞报告、安全注意事项）
+- **新增 `CHANGELOG.md`**：版本里程碑概要，指向 `docs/log.md`
+
+### 📋 Todolist
+
+- [x] Round 22: 开源社区文件 + 专业 README
+- [ ] 延期: admin 密码 / 静态 Token
+
 ## 2026-07-09 Round 21 — 最终检查点
 
 ### 状态
