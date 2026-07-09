@@ -1,0 +1,105 @@
+server/cmd/server/main.go
+  s_10871cc910d331::t_1089da243df7f9 19
+web/src/pages/AiOpsPage.tsx
+  s_10871cc910d331::t_d5451527d2b253 48
+  s_10871cc910d331::t_41e06aca4da5bd 1-3,8,11,16-17
+  s_10871cc910d331::t_9847c4bafd6391 91-93,96,101-163
+  s_10871cc910d331::t_6349464831ba4e 217-279
+server/internal/core/dialect_sqlite.go
+  s_10871cc910d331::t_1ccd3d96cc9e96 35-57
+  s_493c58d50e63f0::t_e52a5bd968b720 1-34,58-71
+server/internal/core/analyzer.go
+  s_10871cc910d331::t_194ff8993c9192 63-66,73,76,80-82
+  s_10871cc910d331::t_027cb5f552cfab 403-462
+  s_10871cc910d331::t_2d2f36f006c1af 45-54
+  s_493c58d50e63f0::t_2036daf19d583a 101,109-111,115
+  s_10871cc910d331::t_897232f62d830f 102,112,116-125
+  s_10871cc910d331::t_c261c8b646e736 174-192
+server/internal/core/dialect.go
+  s_493c58d50e63f0::t_d8cea898d3a294 223
+  s_10871cc910d331::t_d247a7e81bff7b 282,284
+  s_10871cc910d331::t_761f17d44a7ada 21-22
+  s_10871cc910d331::t_df8a7a0091a262 239
+  s_10871cc910d331::t_398ef6092deaeb 9-20,23-27,43-55,80-195,197-222,224-238,240-243,246-281,283,285-325,327
+  s_493c58d50e63f0::t_76897470d37831 1-7,29-41,57-79,326,328-336
+  s_10871cc910d331::t_099147343fcfcb 196
+server/internal/core/types.go
+  s_10871cc910d331::t_c0bf7d90c4a370 136-157
+server/internal/core/llm.go
+  s_493c58d50e63f0::t_43844ceb9f0576 180-185
+  s_493c58d50e63f0::t_59db0e93e0a501 1-70,77-179,186-252
+  s_10871cc910d331::t_eb9278f0d79aff 253-540
+  s_493c58d50e63f0::t_3def55ce388d7d 71-76
+web/src/types.ts
+  s_10871cc910d331::t_b0d67ee305d065 88-103
+  s_493c58d50e63f0::t_4dcea2f7b86d16 86
+server/Dockerfile
+  s_493c58d50e63f0::t_38eafa5f9a7053 20
+web/package.json
+  s_10871cc910d331::t_6206a8d5ea9728 8
+.env.example
+  s_10871cc910d331::t_e8ae4baee1f25c 33-37
+  s_10871cc910d331::t_8600e5b9d0ec81 7-14
+web/src/components/ChangePasswordModal.tsx
+  s_493c58d50e63f0::t_6a81582831bdd1 1,17,23,25-26,32-39,44-54
+  s_493c58d50e63f0::t_2e996a430c9326 2-16,18-22,24,27-31,40-43,55-88
+compose.yaml
+  s_493c58d50e63f0::t_d10624976520b0 2-18,24-25,30-32
+  s_493c58d50e63f0::t_ab661c60c2d5d3 108
+server/internal/core/app.go
+  s_10871cc910d331::t_76fef14fb0a81c 125-127
+  s_10871cc910d331::t_058e7afa7dd8ae 89-90
+server/internal/core/store.go
+  s_493c58d50e63f0::t_99ab2a8bd441ab 33,37-38,40-41,44-49
+  s_10871cc910d331::t_c6e6e511318c86 13
+  s_493c58d50e63f0::t_deb13c8307bd6d 65-66,70,73-74,79-81
+  s_10871cc910d331::t_371bfed6cb5ac9 144-155
+  s_10871cc910d331::t_4ecd811a304b09 390-392
+  s_10871cc910d331::t_60a9039a4ea56c 166-170,177
+  s_493c58d50e63f0::t_268fb193abda40 171-176
+  s_10871cc910d331::t_a3dcac0c439bdd 57,62,64,69,72
+  s_493c58d50e63f0::t_159cdfe37077cc 193-205
+  s_493c58d50e63f0::t_94e7574f258198 356-358
+  s_493c58d50e63f0::t_9ba75cb34506a2 28-29
+web/src/pages/AiOpsSettingsPage.tsx
+  s_10871cc910d331::t_a8e1b87a552892 95
+  s_493c58d50e63f0::t_8e37075f2190be 1-27,29-40,42-55,57-94,96-138,144-153
+  s_10871cc910d331::t_6034966de47b83 139-143
+  s_10871cc910d331::t_b7b4cb83c932d2 28
+  s_10871cc910d331::t_123e4d3096005c 41,56
+server/internal/core/concurrent_test.go
+  s_493c58d50e63f0::t_bcb6b2336a3d29 1-362
+web/src/api/labops.ts
+  s_10871cc910d331::t_2359e4fdb241d8 2
+  s_10871cc910d331::t_44a05d6d36a823 60-73
+server/internal/core/api.go
+  s_493c58d50e63f0::t_474dc79b9152fd 401-403
+  s_10871cc910d331::t_4c8be7de037693 376-381,405-514
+server/internal/core/dialect_mysql.go
+  s_493c58d50e63f0::t_5a295152b4745a 1-29,45-47,50,53,55-98
+  s_10871cc910d331::t_6b1874002b1381 30-44,48-49,51-52,54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.33-trip",
+  "base_commit_sha": "1042a47a51aeb02b3b11b06a005331110740fc9d",
+  "prompts": {},
+  "sessions": {
+    "s_10871cc910d331": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0458fde5-9a83-4d27-b29c-37909c1d4fdb",
+        "model": "deepseek-v4-pro"
+      },
+      "human_author": "Yufeng Li （李裕峰） <li.yufeng@trip.com>"
+    },
+    "s_493c58d50e63f0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "928fcff4-6331-4aa3-a55c-ec851496b121",
+        "model": "deepseek-v4-pro"
+      },
+      "human_author": "Yufeng Li （李裕峰） <li.yufeng@trip.com>"
+    }
+  }
+}
