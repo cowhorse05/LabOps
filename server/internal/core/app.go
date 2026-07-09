@@ -102,6 +102,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/stats", a.handleStats)
 	mux.HandleFunc("GET /api/devices", a.handleListDevices)
 	mux.HandleFunc("GET /api/devices/{id}", a.handleGetDevice)
+	mux.HandleFunc("GET /api/devices/{id}/tasks", a.handleListDeviceTasks)
 	mux.HandleFunc("GET /api/groups", a.handleGroups)
 	mux.HandleFunc("GET /api/tasks", a.handleListTasks)
 	mux.HandleFunc("POST /api/tasks", a.handleCreateTask)

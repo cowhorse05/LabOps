@@ -18,8 +18,8 @@ export default function DeviceDetailPage() {
 
   const fetchData = useCallback(async () => {
     if (!id) return null;
-    const [nextDevice, allTasks] = await Promise.all([labopsApi.device(id), labopsApi.tasks()]);
-    return { device: nextDevice, tasks: allTasks.filter((task) => task.deviceId === id) };
+    const [nextDevice, deviceTasks] = await Promise.all([labopsApi.device(id), labopsApi.deviceTasks(id)]);
+    return { device: nextDevice, tasks: deviceTasks };
   }, [id]);
 
   const { data, loading, error, reload } = useLoadable(fetchData, {

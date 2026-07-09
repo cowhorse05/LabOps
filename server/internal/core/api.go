@@ -82,6 +82,17 @@ func (a *App) handleGetDevice(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, device)
 }
 
+func (a *App) handleListDeviceTasks(w http.ResponseWriter, r *http.Request) {
+	a.refreshState(r.Context())
+	deviceID := r.PathValue("id")
+	tasks, err := a.store.ListTasksByDevice(r.Context(), deviceID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, tasks)
+}
+
 func (a *App) handleGroups(w http.ResponseWriter, r *http.Request) {
 	a.refreshState(r.Context())
 	groups, err := a.store.Groups(r.Context())

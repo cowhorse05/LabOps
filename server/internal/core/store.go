@@ -121,6 +121,17 @@ func (s *Store) Init(ctx context.Context) error {
 			return err
 		}
 	}
+	indexes := []string{
+		`CREATE INDEX IF NOT EXISTS idx_tasks_device_status ON tasks(device_id, status)`,
+		`CREATE INDEX IF NOT EXISTS idx_tasks_status_started ON tasks(status, started_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_audit_logs_device ON audit_logs(device_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_devices_group ON devices(group_name)`,
+	}
+	for _, stmt := range indexes {
+		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
+			return err
+		}
+	}
 	hashed, err := bcrypt.GenerateFromPassword([]byte("admin"), bcrypt.DefaultCost)
 	if err != nil {
 		return err
@@ -328,13 +339,21 @@ func (s *Store) MarkTaskRunning(ctx context.Context, taskID string) error {
 
 func (s *Store) FailTask(ctx context.Context, taskID, stderr string) error {
 	now := nowString()
-	_, err := s.db.ExecContext(ctx, `UPDATE tasks SET status = ?, finished_at = ? WHERE id = ?`, StatusFailed, now, taskID)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT OR REPLACE INTO task_results (task_id, stdout, stderr, exit_code, duration_ms, created_at)
+	defer tx.Rollback()
+	_, err = tx.ExecContext(ctx, `UPDATE tasks SET status = ?, finished_at = ? WHERE id = ?`, StatusFailed, now, taskID)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT OR REPLACE INTO task_results (task_id, stdout, stderr, exit_code, duration_ms, created_at)
 		VALUES (?, '', ?, -1, 0, ?)`, taskID, stderr, now)
-	return err
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) CompleteTask(ctx context.Context, result TaskResultPayload) error {
@@ -347,12 +366,12 @@ func (s *Store) CompleteTask(ctx context.Context, result TaskResultPayload) erro
 		}
 	}
 	now := nowString()
-	// Atomic conditional update: only transition to a terminal status when the
-	// task is still in a non-terminal state (pending or running). This avoids
-	// the TOCTOU race of a separate SELECT-then-UPDATE — if another caller
-	// (e.g. TimeoutTasks) sets a terminal status between the two statements,
-	// this UPDATE matches zero rows and we silently skip it.
-	res, err := s.db.ExecContext(ctx,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx,
 		`UPDATE tasks SET status = ?, finished_at = ? WHERE id = ? AND status NOT IN (?, ?, ?)`,
 		status, now, result.TaskID, StatusSuccess, StatusFailed, StatusTimeout)
 	if err != nil {
@@ -360,11 +379,14 @@ func (s *Store) CompleteTask(ctx context.Context, result TaskResultPayload) erro
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
-		return nil // already in a terminal state, nothing to do
+		return tx.Commit() // already in a terminal state
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT OR REPLACE INTO task_results (task_id, stdout, stderr, exit_code, duration_ms, created_at)
+	_, err = tx.ExecContext(ctx, `INSERT OR REPLACE INTO task_results (task_id, stdout, stderr, exit_code, duration_ms, created_at)
 		VALUES (?, ?, ?, ?, ?, ?)`, result.TaskID, result.Stdout, result.Stderr, result.ExitCode, result.DurationMS, now)
-	return err
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) TimeoutTasks(ctx context.Context, cutoff string) error {
@@ -390,6 +412,29 @@ func (s *Store) ListTasks(ctx context.Context) ([]Task, error) {
 		LEFT JOIN devices d ON d.id = t.device_id
 		LEFT JOIN task_results r ON r.task_id = t.id
 		ORDER BY t.created_at DESC LIMIT 200`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	tasks := make([]Task, 0)
+	for rows.Next() {
+		task, err := scanTaskWithResult(rows)
+		if err != nil {
+			return nil, err
+		}
+		tasks = append(tasks, task)
+	}
+	return tasks, rows.Err()
+}
+
+func (s *Store) ListTasksByDevice(ctx context.Context, deviceID string) ([]Task, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT t.id, t.device_id, COALESCE(d.name, ''), t.group_name, t.command, t.status, t.requested_by,
+		t.created_at, t.started_at, t.finished_at, r.stdout, r.stderr, r.exit_code, r.duration_ms, r.created_at
+		FROM tasks t
+		LEFT JOIN devices d ON d.id = t.device_id
+		LEFT JOIN task_results r ON r.task_id = t.id
+		WHERE t.device_id = ?
+		ORDER BY t.created_at DESC LIMIT 50`, deviceID)
 	if err != nil {
 		return nil, err
 	}

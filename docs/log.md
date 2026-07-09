@@ -1,5 +1,53 @@
 # LabOps 变更日志
 
+## 2026-07-09 Round 16 — 审计中等修复：事务/索引/API 端点
+
+### 修复
+
+本轮修复 Round 15 最终审计发现的 3 个中等问题：
+
+#### 1. SQL 事务包裹 FailTask/CompleteTask (`store.go`)
+
+`FailTask` 和 `CompleteTask` 原先两条 SQL（UPDATE tasks + INSERT task_results）独立执行，无事务保护。现已包裹在 `BeginTx`/`Commit`/`Rollback` 中，保证原子性：
+- `FailTask`: 失败时回滚，不留孤儿 task_results
+- `CompleteTask`: RowsAffected 检查在事务内执行，0 行时安全提交空事务
+- 使用 `defer tx.Rollback()` 模式，错误路径自动回滚
+
+#### 2. DB 索引优化 (`store.go` Init)
+
+新增 4 个索引（`IF NOT EXISTS`，幂等）：
+- `idx_tasks_device_status` — `tasks(device_id, status)` → PendingTasksForDevice
+- `idx_tasks_status_started` — `tasks(status, started_at)` → TimeoutTasks
+- `idx_audit_logs_device` — `audit_logs(device_id)` → 审计按设备过滤
+- `idx_devices_group` — `devices(group_name)` → ListDevicesByGroup
+
+#### 3. DeviceDetailPage 专用 API 端点 (5 files)
+
+新增 `GET /api/devices/{id}/tasks` 端点，替代前端获取全部 tasks 再过滤的模式：
+- **store.go**: 新增 `ListTasksByDevice` (LIMIT 50)
+- **api.go**: 新增 `handleListDeviceTasks` handler
+- **app.go**: 注册路由 `GET /api/devices/{id}/tasks`
+- **labops.ts**: 新增 `deviceTasks(id)` API client
+- **DeviceDetailPage.tsx**: `fetchData` 改用 `deviceTasks(id)` 替代 `tasks() + filter`
+
+### 测试
+
+| 模块 | 结果 |
+|------|------|
+| server `go test ./...` | ✅ PASS (3.01s), 54 函数 |
+| agent `go test ./...` | ✅ PASS (0.93s) |
+| server `go vet` | ✅ 无警告 |
+| agent `go vet` | ✅ 无警告 |
+| 覆盖率 (core) | 72.3% |
+| TypeScript `tsc --noEmit` | ✅ 零错误 |
+| Web `npm run build` | ✅ 通过 (7.46s) |
+
+### 📋 Todolist
+
+- [x] Round 16: SQL 事务 + DB 索引 + DeviceDetailPage API 端点
+- [ ] agent handler 层 WebSocket 测试（handleAgentWS 0%）
+- [ ] 延期: admin 密码 / 静态 Token
+
 ## 2026-07-09 Round 15 — agent.go handler 层测试 + 最终审计
 
 ### agent.go 测试 (0% → ~65% 函数覆盖)
@@ -55,9 +103,9 @@
 ### 📋 Todolist
 
 - [x] ~~Round 15: agent.go 测试 + 最终审计~~
-- [ ] 生产部署前: SQL 事务包裹 FailTask/CompleteTask
-- [ ] 生产部署前: DB 索引优化
-- [ ] 生产部署前: DeviceDetailPage 专用 API 端点
+- [x] 生产部署前: SQL 事务包裹 FailTask/CompleteTask → Round 16
+- [x] 生产部署前: DB 索引优化 → Round 16
+- [x] 生产部署前: DeviceDetailPage 专用 API 端点 → Round 16
 - [ ] 延期: admin 密码 / 静态 Token
 
 ## 2026-07-09 Round 14 — 死代码清理 + 文档更新 + 测试补充

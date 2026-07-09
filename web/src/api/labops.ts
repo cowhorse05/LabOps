@@ -25,6 +25,10 @@ export const labopsApi = {
     const { data } = await api.get<Device>(`/devices/${id}`);
     return data;
   },
+  async deviceTasks(id: string) {
+    const { data } = await api.get<Task[]>(`/devices/${id}/tasks`);
+    return data;
+  },
   async groups() {
     const { data } = await api.get<DeviceGroup[]>('/groups');
     return data;
