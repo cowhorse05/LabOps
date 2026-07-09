@@ -1,6 +1,6 @@
 # LabOps 开源运维系统计划
 
-> 状态：✅ MVP 已完成，69 个 Go 测试全部通过（Server 15 函数 + Agent 19 函数），Docker Compose 验证通过，5 轮审计修复完成（f067fec, cfbd94e, 45fe65f, R16, R17），AI Ops 已运行，安全加固（速率限制/bcrypt/X-Agent-Token/TOCTOU/事务）已完成，DB 索引已优化，WebSocket handler 已测试 · 日期：2026-07-09
+> 状态：✅ MVP 已完成，57 个 Go 测试全部通过（Server 50 函数 + Agent 7 函数），Docker Compose 验证通过，5 轮审计修复完成（f067fec, cfbd94e, 45fe65f, R16, R17, R18），AI Ops 已运行，安全加固完成，DB 索引已优化，WebSocket handler 已测试，GitHub Actions CI 已接入 · 日期：2026-07-09
 > 本文件是 LabOps 项目的总体计划 SSOT（Single Source Of Truth）。各阶段的 design + tasks 拆分见对应 spec 目录。
 > 工作流遵循 OpsService 的 `/spec-impl` 模式，适配 Go/React 技术栈后形成 LabOps 特有惯例。
 
@@ -410,9 +410,11 @@ docs/features/<name>/
 | v0.3 | 2026-07-09 | 更新状态为 MVP 完成；Go 约束从 1.23 提升至 1.25；更新测试计数（Server 34, Agent 7, 前端 1）；移除已解决的阻塞项；追加 AI Ops、安全加固（速率限制/bcrypt/X-Agent-Token/TOCTOU）和协作审计轮次信息 |
 | v0.4 | 2026-07-09 | Round 16: SQL 事务包裹 FailTask/CompleteTask、DB 索引优化 (4 indexes)、DeviceDetailPage 专用 API 端点 (`GET /api/devices/{id}/tasks`)。测试计数更新至 Server 54 函数 + Agent 19 函数 |
 | v0.5 | 2026-07-09 | Round 17: handleAgentWS WebSocket 集成测试 (5 新测试函数，含 token auth/register/heartbeat/disconnect)。Server 15 函数 + Agent 19 函数全部通过 |
+| v0.6 | 2026-07-09 | Round 18: GitHub Actions CI workflow (`.github/workflows/ci.yml`)，3 并行 job：Server vet+test (go 1.25)、Agent vet+test (go 1.23)、Web tsc+build (node 20) |
 
 ## 10. 下一步建议
 
 1. **补充截图**：截取 Dashboard/Devices/DeviceDetail/Tasks/Audit 页面放入 README
 2. **v0.3 文件分发**：按 spec 约定创建 `docs/features/file-distribution/design.md` + `tasks.md`
-3. **CI 接入**：添加 GitHub Actions workflow，自动化 Go test + web build
+3. ~~**CI 接入**~~ ✅ Round 18：GitHub Actions workflow 已添加，自动化 Go test + web build
+4. **admin 密码 / 静态 Token**：安全加固，需 bcrypt 强制修改密码 + JWT 会话机制（架构变更，独立功能分支）

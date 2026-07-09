@@ -1,5 +1,35 @@
 # LabOps 变更日志
 
+## 2026-07-09 Round 18 — GitHub Actions CI 接入
+
+### CI 配置
+
+新增 `.github/workflows/ci.yml`，3 个并行 job：
+
+| Job | 环境 | 步骤 |
+|-----|------|------|
+| Server (Go) | go 1.25, ubuntu-latest | checkout → go vet → go test |
+| Agent (Go) | go 1.23, ubuntu-latest | checkout → go vet → go test |
+| Web (TS) | node 20, ubuntu-latest | checkout → npm ci → tsc --noEmit → npm run build |
+
+触发条件：`push` to `master` / `pull_request` to `master`。
+
+### 测试
+
+| 模块 | 结果 |
+|------|------|
+| server `go test ./...` (50 函数) | ✅ PASS |
+| agent `go test ./...` (7 函数) | ✅ PASS |
+| server `go vet` | ✅ 无警告 |
+| agent `go vet` | ✅ 无警告 |
+| TypeScript `tsc --noEmit` | ✅ 零错误 |
+| Web `npm run build` | ✅ 通过 |
+
+### 📋 Todolist
+
+- [x] Round 18: GitHub Actions CI workflow
+- [ ] 延期: admin 密码 / 静态 Token（架构变更）
+
 ## 2026-07-09 Round 17 — handleAgentWS WebSocket 集成测试
 
 ### 测试
