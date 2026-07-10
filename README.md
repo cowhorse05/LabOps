@@ -549,3 +549,6 @@ LabOps draws inspiration from several excellent open-source operations and monit
 - [Tactical RMM](https://github.com/amidaware/tacticalrmm) — task execution and audit trail design
 - [Fleet](https://github.com/fleetdm/fleet) — device inventory and grouping models
 - [Zabbix](https://github.com/zabbix/zabbix) and [Netdata](https://github.com/netdata/netdata) — monitoring and health scoring concepts
+
+double kill 
+
