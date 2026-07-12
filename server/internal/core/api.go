@@ -5,10 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
-
-	"github.com/golang-jwt/jwt/v5"
 )
 
 type loginRequest struct {
@@ -17,7 +16,7 @@ type loginRequest struct {
 }
 
 type loginResponse struct {
-	Token              string `json:"token"`
+	Token              string `json:"token,omitempty"`
 	User               User   `json:"user"`
 	MustChangePassword bool   `json:"mustChangePassword"`
 }
@@ -28,9 +27,13 @@ type changePasswordRequest struct {
 }
 
 type createTaskRequest struct {
-	DeviceID  string `json:"deviceId"`
-	GroupName string `json:"groupName"`
-	Command   string `json:"command"`
+	DeviceID     string         `json:"deviceId"`
+	GroupName    string         `json:"groupName"`
+	Kind         string         `json:"kind"`
+	Command      string         `json:"command"`
+	TemplateID   string         `json:"templateId"`
+	Arguments    map[string]any `json:"arguments"`
+	Confirmation string         `json:"confirmation"`
 }
 
 type createDeviceRequest struct {
@@ -56,7 +59,7 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	user, ok, err := a.store.FindUser(r.Context(), req.Username, req.Password)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeAPIError(w, http.StatusInternalServerError, "LOGIN_FAILED", "unable to complete login")
 		return
 	}
 	if !ok {
@@ -64,48 +67,24 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create JWT with 24h expiry
-	claims := jwt.MapClaims{
-		"sub":      user.ID,
-		"username": user.Username,
-		"iat":      time.Now().Unix(),
-		"exp":      time.Now().Add(24 * time.Hour).Unix(),
-	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString([]byte(a.config.JWTSecret))
+	sessionToken, csrfToken, err := a.store.CreateWebSession(r.Context(), user.ID, clientIP(r), r.UserAgent())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to generate token")
+		writeAPIError(w, http.StatusInternalServerError, "SESSION_CREATE_FAILED", "unable to create session")
 		return
 	}
+	setAuthCookies(w, sessionToken, csrfToken, a.config.SecureCookies)
 
 	// Check if must change password (from DB)
 	mustChange := a.store.MustChangePassword(r.Context(), user.Username)
 
 	writeJSON(w, http.StatusOK, loginResponse{
-		Token:              tokenString,
 		User:               user,
 		MustChangePassword: mustChange,
 	})
 }
 
 func (a *App) handleMe(w http.ResponseWriter, r *http.Request) {
-	// Extract username from JWT in Authorization header
-	username := a.extractUsername(r)
-	if username == "" {
-		// Fallback to static token / backward compat
-		writeJSON(w, http.StatusOK, a.store.AdminUser())
-		return
-	}
-	user, ok, err := a.store.FindUserByUsername(r.Context(), username)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if !ok {
-		writeError(w, http.StatusNotFound, "user not found")
-		return
-	}
-	writeJSON(w, http.StatusOK, user)
+	writeJSON(w, http.StatusOK, currentUser(r.Context()))
 }
 
 func (a *App) handleChangePassword(w http.ResponseWriter, r *http.Request) {
@@ -117,36 +96,12 @@ func (a *App) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "new password is required")
 		return
 	}
-	if len(req.NewPassword) < 4 {
-		writeError(w, http.StatusBadRequest, "password must be at least 4 characters")
+	if len(req.NewPassword) < 12 {
+		writeAPIError(w, http.StatusBadRequest, "PASSWORD_TOO_SHORT", "password must be at least 12 characters")
 		return
 	}
-
-	// Get current user from JWT
-	authHeader := r.Header.Get("Authorization")
-	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-
-	// Allow static token for backward compat (use admin user)
-	var username, userID string
-	if tokenString == a.config.WebToken {
-		username = "admin"
-		userID = "user_admin"
-	} else {
-		token, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
-			return []byte(a.config.JWTSecret), nil
-		})
-		if err != nil || !token.Valid {
-			writeError(w, http.StatusUnauthorized, "invalid token")
-			return
-		}
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok {
-			writeError(w, http.StatusUnauthorized, "invalid token claims")
-			return
-		}
-		username, _ = claims["username"].(string)
-		userID, _ = claims["sub"].(string)
-		}
+	user := currentUser(r.Context())
+	username := user.Username
 
 	// Prevent password reuse
 	if req.NewPassword == req.OldPassword {
@@ -171,21 +126,74 @@ func (a *App) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Issue new JWT — keep same userID and username as original token
-	newClaims := jwt.MapClaims{
-		"sub":      userID,
-		"username": username,
-		"iat":      time.Now().Unix(),
-		"exp":      time.Now().Add(24 * time.Hour).Unix(),
-	}
-	newToken := jwt.NewWithClaims(jwt.SigningMethodHS256, newClaims)
-	newTokenString, err := newToken.SignedString([]byte(a.config.JWTSecret))
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to generate token")
+	if err := a.store.DeleteUserSessions(r.Context(), user.ID); err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "SESSION_REVOKE_FAILED", "password changed but sessions could not be revoked")
 		return
 	}
+	sessionToken, csrfToken, err := a.store.CreateWebSession(r.Context(), user.ID, clientIP(r), r.UserAgent())
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "SESSION_CREATE_FAILED", "password changed; please log in again")
+		return
+	}
+	setAuthCookies(w, sessionToken, csrfToken, a.config.SecureCookies)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "password_changed"})
+}
 
-	writeJSON(w, http.StatusOK, map[string]string{"token": newTokenString})
+func (a *App) handleLogout(w http.ResponseWriter, r *http.Request) {
+	auth := currentAuth(r.Context())
+	if auth.SessionID != "" {
+		_ = a.store.DeleteWebSession(r.Context(), auth.SessionID)
+	}
+	clearAuthCookies(w, a.config.SecureCookies)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+var usernamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{2,63}$`)
+
+func (a *App) handleListUsers(w http.ResponseWriter, r *http.Request) {
+	users, err := a.store.ListUsers(r.Context())
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "USERS_LIST_FAILED", "unable to list users")
+		return
+	}
+	writeJSON(w, http.StatusOK, users)
+}
+
+func (a *App) handleCreateUser(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Username, DisplayName, Password, Role string
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	req.Username = normalizeUsername(req.Username)
+	if !usernamePattern.MatchString(req.Username) || strings.TrimSpace(req.DisplayName) == "" {
+		writeAPIError(w, http.StatusBadRequest, "USER_INVALID", "invalid username or display name")
+		return
+	}
+	user, err := a.store.CreateUser(r.Context(), req.Username, strings.TrimSpace(req.DisplayName), req.Password, req.Role)
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, "USER_CREATE_FAILED", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, user)
+}
+
+func (a *App) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
+	var req struct{ Role, Status string }
+	if !readJSON(w, r, &req) {
+		return
+	}
+	current := currentUser(r.Context())
+	if r.PathValue("id") == current.ID && (req.Status == "disabled" || req.Role != current.Role) {
+		writeAPIError(w, http.StatusBadRequest, "SELF_ACCESS_CHANGE_FORBIDDEN", "cannot disable or change the role of the current user")
+		return
+	}
+	if err := a.store.UpdateUserAccess(r.Context(), r.PathValue("id"), req.Role, req.Status); err != nil {
+		writeAPIError(w, http.StatusBadRequest, "USER_UPDATE_FAILED", err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (a *App) handleStats(w http.ResponseWriter, r *http.Request) {
@@ -362,10 +370,53 @@ func (a *App) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Command = strings.TrimSpace(req.Command)
+	req.Kind = strings.TrimSpace(req.Kind)
 	req.DeviceID = strings.TrimSpace(req.DeviceID)
 	req.GroupName = strings.TrimSpace(req.GroupName)
-	if req.Command == "" {
-		writeError(w, http.StatusBadRequest, "command is required")
+	auth := currentAuth(r.Context())
+	user := auth.User
+	if req.Kind == "" {
+		req.Kind = TaskKindAdHoc
+	}
+	var template CommandTemplate
+	var renderedArgs []string
+	if req.Kind == TaskKindTemplate {
+		if !HasPermission(user, PermissionTemplateRun) {
+			writeAPIError(w, http.StatusForbidden, "PERMISSION_DENIED", "template execution permission is required")
+			return
+		}
+		var ok bool
+		var err error
+		template, ok, err = a.store.GetCommandTemplate(r.Context(), strings.TrimSpace(req.TemplateID))
+		if err != nil {
+			writeAPIError(w, http.StatusInternalServerError, "TEMPLATE_LOAD_FAILED", "unable to load template")
+			return
+		}
+		if !ok {
+			writeAPIError(w, http.StatusNotFound, "TEMPLATE_NOT_FOUND", "template not found")
+			return
+		}
+		renderedArgs, err = RenderTemplate(template, req.Arguments)
+		if err != nil {
+			writeAPIError(w, http.StatusBadRequest, "TEMPLATE_ARGUMENTS_INVALID", err.Error())
+			return
+		}
+		req.Command = template.Name
+	} else if req.Kind == TaskKindAdHoc {
+		if !HasPermission(user, PermissionAdHocRun) {
+			writeAPIError(w, http.StatusForbidden, "PERMISSION_DENIED", "ad-hoc command permission is required")
+			return
+		}
+		if req.Command == "" {
+			writeAPIError(w, http.StatusBadRequest, "COMMAND_REQUIRED", "command is required")
+			return
+		}
+		if !auth.Legacy && req.Confirmation != "EXECUTE" {
+			writeAPIError(w, http.StatusBadRequest, "COMMAND_CONFIRMATION_REQUIRED", "confirmation must be EXECUTE")
+			return
+		}
+	} else {
+		writeAPIError(w, http.StatusBadRequest, "TASK_KIND_INVALID", "kind must be template or ad_hoc")
 		return
 	}
 	if req.DeviceID == "" && req.GroupName == "" {
@@ -401,12 +452,22 @@ func (a *App) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 	tasks := make([]Task, 0, len(devices))
 	var errs []string
 	for _, device := range devices {
-		task, err := a.store.CreateTask(r.Context(), device.ID, device.GroupName, req.Command, "admin")
+		taskSpec := Task{DeviceID: device.ID, GroupName: device.GroupName, Command: req.Command, Kind: req.Kind, RequestedBy: user.Username}
+		if req.Kind == TaskKindTemplate {
+			taskSpec.TemplateID = template.ID
+			taskSpec.Executable = template.Executable
+			taskSpec.Args = renderedArgs
+			taskSpec.TimeoutSeconds = template.TimeoutSeconds
+		} else {
+			taskSpec.TimeoutSeconds = 300
+		}
+		task, err := a.store.CreateTaskSpec(r.Context(), taskSpec)
 		if err != nil {
 			errs = append(errs, fmt.Sprintf("%s: create failed: %v", device.Name, err))
 			continue
 		}
 		task.DeviceName = device.Name
+		_ = a.store.CreateAudit(r.Context(), AuditLog{Actor: user.Username, ActorID: user.ID, ActorRole: user.Role, RemoteAddr: clientIP(r), RequestID: requestID(r.Context()), Action: "command.create", DeviceID: device.ID, TaskID: task.ID, Status: StatusPending, Message: auditMessage(req.Command)})
 		if err := a.dispatchTask(r.Context(), task); err != nil {
 			errs = append(errs, fmt.Sprintf("%s: dispatch failed: %v", device.Name, err))
 			continue
@@ -492,7 +553,7 @@ func (a *App) handleSaveLLMConfig(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	// If API key is empty, keep the existing one from the database
-	if req.APIKey == "" {
+	if req.APIKey == "" || strings.Contains(req.APIKey, "****") {
 		existing, err := a.store.GetLLMConfig(r.Context())
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
@@ -675,32 +736,30 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 }
 
 func writeError(w http.ResponseWriter, status int, message string) {
-	writeJSON(w, status, map[string]string{"error": message})
+	writeAPIError(w, status, "REQUEST_FAILED", message)
 }
 
-// extractUsername returns the username from the JWT in the Authorization header.
-// Returns empty string if token is missing, invalid, or is the static WebToken.
-func (a *App) extractUsername(r *http.Request) string {
-	authHeader := r.Header.Get("Authorization")
-	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-	if tokenString == "" || tokenString == a.config.WebToken {
-		return ""
-	}
-	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-		}
-		return []byte(a.config.JWTSecret), nil
+func writeAPIError(w http.ResponseWriter, status int, code, message string) {
+	requestID := w.Header().Get("X-Request-ID")
+	writeJSON(w, status, map[string]string{
+		"error": message, "code": code, "message": message, "requestId": requestID,
 	})
-	if err != nil || !token.Valid {
-		return ""
+}
+
+func clientIP(r *http.Request) string {
+	value := r.Header.Get("X-Forwarded-For")
+	if idx := strings.Index(value, ","); idx >= 0 {
+		value = value[:idx]
 	}
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		return ""
+	value = strings.TrimSpace(value)
+	if value != "" {
+		return value
 	}
-	username, _ := claims["username"].(string)
-	return username
+	value = r.RemoteAddr
+	if idx := strings.LastIndex(value, ":"); idx > 0 {
+		value = value[:idx]
+	}
+	return value
 }
 
 func auditMessage(command string) string {

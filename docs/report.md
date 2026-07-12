@@ -41,7 +41,7 @@ Deferred:
 
 1. Start the demo with `.\scripts\dev.ps1`.
 2. Open `http://localhost:5173`.
-3. Log in with `admin / admin`.
+3. Log in with the bootstrap administrator password configured outside the repository and complete the forced password change.
 4. View online Docker-simulated devices.
 5. Execute a command on one device.
 6. Check task output and audit logs.

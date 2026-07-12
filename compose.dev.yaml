@@ -1,0 +1,38 @@
+name: labops-dev
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: labops-local
+      MYSQL_DATABASE: labops
+      MYSQL_USER: labops
+      MYSQL_PASSWORD: labops-local
+    ports: ["3307:3306"]
+    volumes: [mysql-dev-data:/var/lib/mysql]
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  server:
+    build: { context: ./server }
+    environment:
+      LABOPS_ENV: development
+      LABOPS_ADDR: ":8080"
+      LABOPS_DB_DRIVER: mysql
+      LABOPS_MYSQL_DSN: labops:labops-local@tcp(mysql:3306)/labops?parseTime=true&charset=utf8mb4
+      LABOPS_BOOTSTRAP_ADMIN_PASSWORD: local-development-password
+      LABOPS_PUBLIC_ORIGIN: http://localhost:5173
+    ports: ["8080:8080"]
+    depends_on:
+      mysql: { condition: service_healthy }
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile.dev
+    environment:
+      VITE_PROXY_TARGET: http://server:8080
+    ports: ["5173:5173"]
+    depends_on: [server]
+volumes:
+  mysql-dev-data:

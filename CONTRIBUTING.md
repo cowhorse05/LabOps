@@ -47,7 +47,7 @@ The full demo runs with a single command:
 .\scripts\dev.ps1
 ```
 
-This starts the Go API server, the React web console, and four simulated agents via Docker Compose. Open `http://localhost:5173` and log in with `admin / admin`.
+This starts MySQL, the Go API server, and the React development console. Open `http://localhost:5173`, use the development bootstrap password from `compose.dev.yaml`, and change it immediately. Enroll a local Agent from the device enrollment page when Agent testing is needed.
 
 To stop:
 
@@ -63,8 +63,9 @@ Copy `.env.example` to `.env` and adjust as needed. Key variables:
 |---|---|---|
 | `LABOPS_ADDR` | Server listen address | `:8080` |
 | `LABOPS_DB_PATH` | SQLite database path | `data/labops.db` |
-| `LABOPS_AGENT_TOKEN` | Agent WebSocket auth token | `dev-agent-token` |
-| `LABOPS_WEB_TOKEN` | Web REST API auth token | `dev-token` |
+| `LABOPS_BOOTSTRAP_ADMIN_PASSWORD` | Initial admin password on an empty database | none |
+| `LABOPS_ENCRYPTION_KEY` | Base64 32-byte secret encryption key | none |
+| `LABOPS_PUBLIC_ORIGIN` | Exact Web origin | `http://localhost:5173` in development |
 | `VITE_PROXY_TARGET` | Vite dev server proxy target | `http://localhost:8080` |
 
 ## Running Tests

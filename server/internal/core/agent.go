@@ -44,9 +44,33 @@ func (c *AgentClient) Close() {
 }
 
 func (a *App) handleAgentWS(w http.ResponseWriter, r *http.Request) {
-	if a.config.AgentToken != "" && r.Header.Get("X-Agent-Token") != a.config.AgentToken {
-		writeError(w, http.StatusUnauthorized, "invalid agent token")
-		return
+	authenticatedDeviceID := ""
+	if a.config.AgentToken != "" {
+		if r.Header.Get("X-Agent-Token") != a.config.AgentToken {
+			writeAPIError(w, http.StatusUnauthorized, "AGENT_AUTH_INVALID", "invalid agent credential")
+			return
+		}
+	} else if a.config.Environment != "" {
+		value := strings.TrimSpace(r.Header.Get("Authorization"))
+		if !strings.HasPrefix(value, "Agent ") {
+			writeAPIError(w, http.StatusUnauthorized, "AGENT_AUTH_REQUIRED", "agent credential is required")
+			return
+		}
+		parts := strings.SplitN(strings.TrimPrefix(value, "Agent "), ":", 2)
+		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+			writeAPIError(w, http.StatusUnauthorized, "AGENT_AUTH_INVALID", "invalid agent credential")
+			return
+		}
+		valid, err := a.store.ValidateDeviceCredential(r.Context(), parts[0], parts[1])
+		if err != nil {
+			writeAPIError(w, http.StatusInternalServerError, "AGENT_AUTH_ERROR", "unable to validate agent credential")
+			return
+		}
+		if !valid {
+			writeAPIError(w, http.StatusUnauthorized, "AGENT_AUTH_INVALID", "invalid or revoked agent credential")
+			return
+		}
+		authenticatedDeviceID = parts[0]
 	}
 
 	conn, err := a.upgrader.Upgrade(w, r, nil)
@@ -72,6 +96,10 @@ func (a *App) handleAgentWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	device := deviceFromRegister(reg)
+	if authenticatedDeviceID != "" {
+		device.ID = authenticatedDeviceID
+		device.CredentialStatus = "active"
+	}
 	if device.ID == "" || device.Name == "" {
 		_ = conn.WriteJSON(map[string]string{"type": "error", "message": "agentId and name are required"})
 		return
@@ -222,8 +250,13 @@ func (a *App) dispatchTask(ctx context.Context, task Task) error {
 	msg := AgentEnvelope{
 		Type: "command",
 		Payload: CommandPayload{
-			TaskID:  task.ID,
-			Command: task.Command,
+			ProtocolVersion: 2,
+			TaskID:          task.ID,
+			Kind:            task.Kind,
+			Command:         task.Command,
+			Executable:      task.Executable,
+			Args:            task.Args,
+			TimeoutSeconds:  task.TimeoutSeconds,
 		},
 	}
 	if err := client.Send(msg); err != nil {

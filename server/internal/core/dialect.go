@@ -18,8 +18,8 @@ const (
 	CT_MediumText = "mediumtext"
 	CT_Int        = "int_col"
 	CT_TinyInt    = "tinyint"
-	CT_BigInt     = "bigint"       // BIGINT (MySQL) / INTEGER (SQLite) — non-auto-increment
-	CT_BigIntAuto = "bigint_auto"   // includes PRIMARY KEY AUTO_INCREMENT / AUTOINCREMENT
+	CT_BigInt     = "bigint"      // BIGINT (MySQL) / INTEGER (SQLite) — non-auto-increment
+	CT_BigIntAuto = "bigint_auto" // includes PRIMARY KEY AUTO_INCREMENT / AUTOINCREMENT
 	CT_Double     = "double_col"
 )
 
@@ -132,7 +132,9 @@ var schema = struct {
 				{name: "password", colType: CT_String},
 				{name: "roles", colType: CT_String512},
 				{name: "must_change_password", colType: CT_TinyInt, defVal: "0"},
+				{name: "status", colType: CT_String32, defVal: "'active'"},
 				{name: "created_at", colType: CT_String32},
+				{name: "updated_at", colType: CT_String32, defVal: "''"},
 			},
 			suffix: true,
 		},
@@ -157,6 +159,8 @@ var schema = struct {
 				{name: "last_seen", colType: CT_String32},
 				{name: "created_at", colType: CT_String32},
 				{name: "updated_at", colType: CT_String32},
+				{name: "credential_status", colType: CT_String32, defVal: "'pending_reenrollment'"},
+				{name: "revoked_at", colType: CT_String32, defVal: "''"},
 			},
 			suffix: true,
 		},
@@ -178,6 +182,11 @@ var schema = struct {
 				{name: "device_id", colType: CT_String64},
 				{name: "group_name", colType: CT_String128},
 				{name: "command", colType: CT_Text},
+				{name: "kind", colType: CT_String32, defVal: "'ad_hoc'"},
+				{name: "template_id", colType: CT_String64, defVal: "''"},
+				{name: "executable", colType: CT_String512, defVal: "''"},
+				{name: "args_json", colType: CT_String1024, defVal: "''"},
+				{name: "timeout_seconds", colType: CT_Int, defVal: "30"},
 				{name: "status", colType: CT_String32},
 				{name: "requested_by", colType: CT_String128},
 				{name: "created_at", colType: CT_String32},
@@ -203,6 +212,10 @@ var schema = struct {
 			columns: []colDef{
 				{name: "id", colType: CT_String64},
 				{name: "actor", colType: CT_String128},
+				{name: "actor_id", colType: CT_String64, defVal: "''"},
+				{name: "actor_role", colType: CT_String32, defVal: "''"},
+				{name: "remote_addr", colType: CT_String128, defVal: "''"},
+				{name: "request_id", colType: CT_String64, defVal: "''"},
 				{name: "action", colType: CT_String64},
 				{name: "device_id", colType: CT_String64, nullable: true},
 				{name: "task_id", colType: CT_String64, nullable: true},
@@ -226,12 +239,84 @@ var schema = struct {
 			},
 			suffix: true,
 		},
+		{
+			name: "schema_migrations",
+			columns: []colDef{
+				{name: "version", colType: CT_Int},
+				{name: "name", colType: CT_String},
+				{name: "applied_at", colType: CT_String32},
+			},
+			suffix: true,
+		},
+		{
+			name: "web_sessions",
+			columns: []colDef{
+				{name: "id", colType: CT_String64},
+				{name: "user_id", colType: CT_String64},
+				{name: "token_hash", colType: CT_String64, unique: true},
+				{name: "csrf_hash", colType: CT_String64},
+				{name: "remote_addr", colType: CT_String128, defVal: "''"},
+				{name: "user_agent", colType: CT_String512, defVal: "''"},
+				{name: "created_at", colType: CT_String32},
+				{name: "last_seen_at", colType: CT_String32},
+				{name: "idle_expires_at", colType: CT_String32},
+				{name: "absolute_expires_at", colType: CT_String32},
+			},
+			suffix: true,
+		},
+		{
+			name: "enrollment_codes",
+			columns: []colDef{
+				{name: "id", colType: CT_String64},
+				{name: "code_hash", colType: CT_String64, unique: true},
+				{name: "expires_at", colType: CT_String32},
+				{name: "max_uses", colType: CT_Int, defVal: "1"},
+				{name: "used_count", colType: CT_Int, defVal: "0"},
+				{name: "created_by", colType: CT_String64},
+				{name: "created_at", colType: CT_String32},
+				{name: "revoked_at", colType: CT_String32, defVal: "''"},
+			},
+			suffix: true,
+		},
+		{
+			name: "device_credentials",
+			columns: []colDef{
+				{name: "device_id", colType: CT_String64},
+				{name: "secret_hash", colType: CT_String64},
+				{name: "status", colType: CT_String32, defVal: "'active'"},
+				{name: "created_at", colType: CT_String32},
+				{name: "last_used_at", colType: CT_String32, defVal: "''"},
+				{name: "revoked_at", colType: CT_String32, defVal: "''"},
+			},
+			suffix: true,
+		},
+		{
+			name: "command_templates",
+			columns: []colDef{
+				{name: "id", colType: CT_String64},
+				{name: "name", colType: CT_String},
+				{name: "description", colType: CT_String512, defVal: "''"},
+				{name: "os", colType: CT_String32, defVal: "'linux'"},
+				{name: "executable", colType: CT_String512},
+				{name: "args_json", colType: CT_String1024, defVal: "'[]'"},
+				{name: "parameters_json", colType: CT_String1024, defVal: "'[]'"},
+				{name: "requires_privilege", colType: CT_TinyInt, defVal: "0"},
+				{name: "enabled", colType: CT_TinyInt, defVal: "1"},
+				{name: "timeout_seconds", colType: CT_Int, defVal: "30"},
+				{name: "created_at", colType: CT_String32},
+				{name: "updated_at", colType: CT_String32},
+			},
+			suffix: true,
+		},
 	},
 	indexes: []indexDef{
 		{name: "idx_tasks_device_status", table: "tasks", cols: []string{"device_id", "status"}},
 		{name: "idx_tasks_status_started", table: "tasks", cols: []string{"status", "started_at"}},
 		{name: "idx_audit_logs_device", table: "audit_logs", cols: []string{"device_id"}},
 		{name: "idx_devices_group", table: "devices", cols: []string{"group_name"}},
+		{name: "idx_web_sessions_token", table: "web_sessions", cols: []string{"token_hash"}},
+		{name: "idx_web_sessions_user", table: "web_sessions", cols: []string{"user_id"}},
+		{name: "idx_enrollment_expiry", table: "enrollment_codes", cols: []string{"expires_at"}},
 	},
 	migrations: []migrationDef{
 		{table: "users", col: "must_change_password", colType: CT_TinyInt, defVal: "0"},

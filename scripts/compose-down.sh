@@ -15,4 +15,4 @@ else
 fi
 
 echo "Stopping LabOps demo..."
-"$RUNTIME" compose down
+"$RUNTIME" compose -f compose.dev.yaml down

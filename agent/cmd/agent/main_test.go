@@ -1,9 +1,71 @@
 package main
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
+
+func TestCredentialFileRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nested", "credentials.json")
+	want := storedCredentials{DeviceID: "device-1", DeviceSecret: "secret-1"}
+	if err := saveCredentials(path, want); err != nil {
+		t.Fatal(err)
+	}
+	got, err := loadCredentials(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("got %+v want %+v", got, want)
+	}
+}
+
+func TestEnroll(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/agent/enroll" || r.Method != http.MethodPost {
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if body["code"] != "one-time" {
+			t.Fatalf("unexpected code: %v", body["code"])
+		}
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(storedCredentials{DeviceID: "device-2", DeviceSecret: "secret-2"})
+	}))
+	defer server.Close()
+	got, err := enroll(config{ServerURL: server.URL, EnrollCode: "one-time", AgentID: "ignored", Name: "host", GroupName: "lab", MockProfile: "ubuntu"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.DeviceID != "device-2" || got.DeviceSecret != "secret-2" {
+		t.Fatalf("unexpected credentials: %+v", got)
+	}
+}
+
+func TestTemplateExecutionUsesArgv(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Linux template paths are validated in CI")
+	}
+	stdout, stderr, exitCode := executePayload(commandPayload{Kind: "template", Executable: "/bin/echo", Args: []string{"hello; uname"}, TimeoutSeconds: 5})
+	if exitCode != 0 || stderr != "" {
+		t.Fatalf("exit=%d stderr=%q", exitCode, stderr)
+	}
+	if strings.TrimSpace(stdout) != "hello; uname" {
+		t.Fatalf("argument was interpreted by a shell: %q", stdout)
+	}
+	_, stderr, exitCode = executePayload(commandPayload{Kind: "template", Executable: "echo", Args: []string{"unsafe"}, TimeoutSeconds: 5})
+	if exitCode == 0 || !strings.Contains(stderr, "absolute path") {
+		t.Fatalf("relative executable accepted: exit=%d stderr=%q", exitCode, stderr)
+	}
+}
 
 func TestAgentWSURL(t *testing.T) {
 	got, err := agentWSURL("http://localhost:8080")

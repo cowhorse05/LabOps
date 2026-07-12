@@ -7,6 +7,7 @@ import dayjs from 'dayjs';
 import { labopsApi } from '@/api/labops';
 import type { Device, Task } from '@/types';
 import { statusColor, statusText } from '@/utils/status';
+import { useAuthStore } from '@/stores/auth';
 
 const defaultCommand = 'uname -a && echo hello-from-labops';
 
@@ -15,6 +16,7 @@ export default function DeviceDetailPage() {
   const { message } = App.useApp();
   const [command, setCommand] = useState(defaultCommand);
   const [running, setRunning] = useState(false);
+  const canRunAdHoc = useAuthStore((s) => s.user?.permissions.includes('commands:adhoc') ?? false);
 
   const fetchData = useCallback(async () => {
     if (!id) return null;
@@ -33,7 +35,7 @@ export default function DeviceDetailPage() {
     if (!id || !command.trim()) return;
     setRunning(true);
     try {
-      await labopsApi.createTask({ deviceId: id, command });
+      await labopsApi.createTask({ deviceId: id, kind: 'ad_hoc', command, confirmation: 'EXECUTE' });
       message.success('命令已下发');
       await reload();
     } finally {
@@ -101,7 +103,7 @@ export default function DeviceDetailPage() {
             </Col>
           </Row>
 
-          <Card title="命令执行" style={{ marginTop: 16 }}>
+          {canRunAdHoc && <Card title="管理员临时命令" style={{ marginTop: 16 }}>
             <Space.Compact style={{ width: '100%' }}>
               <Input.TextArea
                 value={command}
@@ -112,7 +114,7 @@ export default function DeviceDetailPage() {
                 执行
               </Button>
             </Space.Compact>
-          </Card>
+          </Card>}
 
           <Card title="最近任务" style={{ marginTop: 16 }}>
             <Table

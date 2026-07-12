@@ -3,6 +3,9 @@ export interface User {
   username: string;
   displayName: string;
   roles: string[];
+  role: 'admin' | 'operator' | 'viewer';
+  permissions: string[];
+  status: 'active' | 'disabled';
 }
 
 export interface Device {
@@ -24,6 +27,8 @@ export interface Device {
   lastSeen: string;
   createdAt: string;
   updatedAt: string;
+  credentialStatus: 'pending_reenrollment' | 'active' | 'revoked';
+  revokedAt?: string;
 }
 
 export interface DeviceStats {
@@ -54,6 +59,11 @@ export interface Task {
   deviceName: string;
   groupName: string;
   command: string;
+  kind: 'template' | 'ad_hoc';
+  templateId?: string;
+  executable?: string;
+  args?: string[];
+  timeoutSeconds: number;
   status: 'pending' | 'running' | 'success' | 'failed' | 'timeout';
   requestedBy: string;
   createdAt: string;
@@ -65,6 +75,10 @@ export interface Task {
 export interface AuditLog {
   id: string;
   actor: string;
+  actorId?: string;
+  actorRole?: string;
+  remoteAddr?: string;
+  requestId?: string;
   action: string;
   deviceId?: string;
   device?: string;
@@ -72,6 +86,41 @@ export interface AuditLog {
   status: string;
   message: string;
   createdAt: string;
+}
+
+export interface EnrollmentCode {
+  id: string;
+  code?: string;
+  expiresAt: string;
+  maxUses: number;
+  usedCount: number;
+  createdBy: string;
+  createdAt: string;
+  revokedAt?: string;
+}
+
+export interface TemplateParameter {
+  name: string;
+  type: 'string' | 'integer';
+  pattern?: string;
+  enum?: string[];
+  min?: number;
+  max?: number;
+}
+
+export interface CommandTemplate {
+  id: string;
+  name: string;
+  description: string;
+  os: string;
+  executable: string;
+  args: string[];
+  parameters: TemplateParameter[];
+  requiresPrivilege: boolean;
+  enabled: boolean;
+  timeoutSeconds: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ChangePasswordRequest {

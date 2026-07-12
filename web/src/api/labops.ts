@@ -1,9 +1,9 @@
 import { api } from './client';
-import type { AiOpsLLMConfig, AuditLog, Device, DeviceGroup, DeviceStats, LLMRecommendation, LLMTestResult, Task, User } from '@/types';
+import type { AiOpsLLMConfig, AuditLog, CommandTemplate, Device, DeviceGroup, DeviceStats, EnrollmentCode, LLMRecommendation, LLMTestResult, Task, User } from '@/types';
 
 export const authApi = {
   async login(username: string, password: string) {
-    const { data } = await api.post<{ token: string; user: User; mustChangePassword?: boolean }>('/auth/login', { username, password });
+    const { data } = await api.post<{ user: User; mustChangePassword?: boolean }>('/auth/login', { username, password });
     return data;
   },
   async me() {
@@ -11,8 +11,11 @@ export const authApi = {
     return data;
   },
   async changePassword(oldPassword: string, newPassword: string) {
-    const { data } = await api.post<{ token: string }>('/auth/change-password', { oldPassword, newPassword });
+    const { data } = await api.post<{ status: string }>('/auth/change-password', { oldPassword, newPassword });
     return data;
+  },
+  async logout() {
+    await api.post('/auth/logout');
   },
 };
 
@@ -62,7 +65,7 @@ export const labopsApi = {
     const { data } = await api.get<Task>(`/tasks/${id}`);
     return data;
   },
-  async createTask(input: { deviceId?: string; groupName?: string; command: string }) {
+  async createTask(input: { deviceId?: string; groupName?: string; kind: 'template' | 'ad_hoc'; command?: string; templateId?: string; arguments?: Record<string, unknown>; confirmation?: string }) {
     const { data } = await api.post<{ tasks: Task[] }>('/tasks', input);
     return data;
   },
@@ -70,6 +73,16 @@ export const labopsApi = {
     const { data } = await api.get<AuditLog[]>('/audit-logs');
     return data;
   },
+  async users() { const { data } = await api.get<User[]>('/users'); return data; },
+  async createUser(input: { username: string; displayName: string; password: string; role: string }) { const { data } = await api.post<User>('/users', input); return data; },
+  async updateUser(id: string, input: { role: string; status: string }) { await api.put(`/users/${id}`, input); },
+  async enrollmentCodes() { const { data } = await api.get<EnrollmentCode[]>('/enrollment-codes'); return data; },
+  async createEnrollmentCode(input: { expiresInSeconds?: number; maxUses?: number } = {}) { const { data } = await api.post<EnrollmentCode>('/enrollment-codes', input); return data; },
+  async revokeEnrollmentCode(id: string) { await api.delete(`/enrollment-codes/${id}`); },
+  async revokeDevice(id: string) { await api.post(`/devices/${id}/revoke`); },
+  async commandTemplates() { const { data } = await api.get<CommandTemplate[]>('/command-templates'); return data; },
+  async createCommandTemplate(input: Omit<CommandTemplate, 'id' | 'createdAt' | 'updatedAt'>) { const { data } = await api.post<CommandTemplate>('/command-templates', input); return data; },
+  async updateCommandTemplate(id: string, input: CommandTemplate) { const { data } = await api.put<CommandTemplate>(`/command-templates/${id}`, input); return data; },
   async llmConfig() {
     const { data } = await api.get<AiOpsLLMConfig>('/aiops/llm-config');
     return data;

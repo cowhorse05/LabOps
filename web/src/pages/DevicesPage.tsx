@@ -6,6 +6,7 @@ import dayjs from 'dayjs';
 import { labopsApi } from '@/api/labops';
 import { useLoadable } from '@/hooks/useLoadable';
 import { statusColor, statusText } from '@/utils/status';
+import { useAuthStore } from '@/stores/auth';
 
 export default function DevicesPage() {
   const navigate = useNavigate();
@@ -18,6 +19,7 @@ export default function DevicesPage() {
   const [createForm] = Form.useForm();
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const canManage = useAuthStore((s) => s.user?.permissions.includes('devices:revoke') ?? false);
 
   const filtered = useMemo(() => {
     const k = keyword.trim().toLowerCase();
@@ -45,8 +47,8 @@ export default function DevicesPage() {
   const handleDelete = async (id: string) => {
     try {
       setDeleting(id);
-      await labopsApi.deleteDevice(id);
-      message.success('设备已删除');
+      await labopsApi.revokeDevice(id);
+      message.success('设备凭据已吊销');
       reload();
     } catch (err: any) {
       message.error(`删除失败: ${err?.response?.data?.error || err?.message}`);
@@ -63,9 +65,9 @@ export default function DevicesPage() {
           <Typography.Text className="muted">Agent 连接后会自动出现在这里，也可以手动创建。</Typography.Text>
         </div>
         <Space>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalVisible(true)}>
+          {canManage && <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalVisible(true)}>
             新建设备
-          </Button>
+          </Button>}
           <Input
             allowClear
             prefix={<SearchOutlined />}
@@ -104,6 +106,7 @@ export default function DevicesPage() {
               dataIndex: 'status',
               render: (status) => <Tag color={statusColor(status)}>{statusText(status)}</Tag>,
             },
+            { title: '凭据', dataIndex: 'credentialStatus', render: (value) => <Tag color={value === 'active' ? 'green' : value === 'revoked' ? 'red' : 'orange'}>{value || '待登记'}</Tag> },
             {
               title: 'CPU',
               dataIndex: 'cpuUsage',
@@ -121,17 +124,17 @@ export default function DevicesPage() {
                   <Button type="link" icon={<EyeOutlined />} onClick={() => navigate(`/devices/${record.id}`)}>
                     详情
                   </Button>
-                  <Popconfirm
+                  {canManage && <Popconfirm
                     title="确定删除该设备吗？"
-                    description="删除后设备将从列表中移除，Agent 重新连接时会自动恢复。"
+                    description="吊销后 Agent 会立即断开，必须重新登记才能接入。"
                     onConfirm={() => handleDelete(record.id)}
                     okText="确定"
                     cancelText="取消"
                   >
                     <Button type="link" danger icon={<DeleteOutlined />} loading={deleting === record.id}>
-                      删除
+                      吊销
                     </Button>
-                  </Popconfirm>
+                  </Popconfirm>}
                 </Space>
               ),
             },

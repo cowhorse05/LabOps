@@ -305,28 +305,23 @@ Base URL: `http://localhost:8080/api`
 | Method | Path | Auth | 说明 |
 |--------|------|:----:|------|
 | GET | `/health` | - | 健康检查 → `{"status":"ok"}` |
-| POST | `/auth/login` | - | 登录 → `{"token":"...", "user":{...}}` |
-| GET | `/auth/me` | Bearer | 当前用户 |
-| GET | `/stats` | Bearer | 设备统计 `{total, online, offline}` |
+| POST | `/auth/login` | - | 登录并设置安全会话 Cookie |
+| GET | `/auth/me` | Session | 当前用户、角色与权限 |
+| GET | `/stats` | Session | 设备统计 `{total, online, offline}` |
 | GET | `/devices` | Bearer | 设备列表 |
 | GET | `/devices/{id}` | Bearer | 设备详情 |
 | GET | `/groups` | Bearer | 分组列表 (含 online/total) |
 | GET | `/tasks` | Bearer | 任务列表 (含 result, LIMIT 200) |
-| POST | `/tasks` | Bearer | 创建任务 `{deviceId?, groupName?, command}` |
+| POST | `/tasks` | Session+CSRF | 创建模板任务或管理员临时命令 |
 | GET | `/tasks/{id}` | Bearer | 任务详情 |
 | GET | `/audit-logs` | Bearer | 审计日志 (LIMIT 200) |
 | GET | `/aiops/report` | Bearer | AI Ops 分析报告 |
-| GET | `/agent/ws?token=...` | query | WebSocket 升级 (Agent) |
+| POST | `/agent/enroll` | 注册码 | Agent 首次登记 |
+| GET | `/agent/ws` | Agent credential | WSS 升级 |
 
 ### 认证
 
-Web API 使用 `Authorization: Bearer <token>` header。
-
-默认 token: `dev-token`（通过 `LABOPS_WEB_TOKEN` 环境变量配置）。
-
-Agent WebSocket 使用 `?token=<token>` 查询参数认证。
-
-默认 agent token: `dev-agent-token`（通过 `LABOPS_AGENT_TOKEN` 环境变量配置）。
+Web API 使用可撤销会话 Cookie；所有写请求同时验证 CSRF Cookie 与 `X-CSRF-Token`。Agent 使用一次性注册码换取每设备独立凭据，WSS 通过 `Authorization: Agent <deviceId>:<secret>` 认证。系统不提供通用默认 Token。
 
 ---
 
@@ -338,8 +333,9 @@ Agent WebSocket 使用 `?token=<token>` 查询参数认证。
 |------|--------|------|
 | `LABOPS_ADDR` | `:8080` | Server 监听地址 |
 | `LABOPS_DB_PATH` | `data/labops.db` | SQLite 数据库路径 |
-| `LABOPS_AGENT_TOKEN` | `dev-agent-token` | Agent 认证 Token |
-| `LABOPS_WEB_TOKEN` | `dev-token` | Web 认证 Token |
+| `LABOPS_BOOTSTRAP_ADMIN_PASSWORD` | 无 | 空数据库管理员初始化密码 |
+| `LABOPS_ENCRYPTION_KEY` | 无 | Base64 编码的 32 字节加密密钥 |
+| `LABOPS_PUBLIC_ORIGIN` | 生产必填 | 精确 Web HTTPS Origin |
 | `VITE_PROXY_TARGET` | `http://localhost:8080` | Vite 开发代理目标 |
 
 ### Agent 启动参数
@@ -347,8 +343,9 @@ Agent WebSocket 使用 `?token=<token>` 查询参数认证。
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
 | `--server` | `http://localhost:8080` | Server 地址 |
-| `--token` | `dev-agent-token` | 认证 Token |
-| `--id` | `agent-<name>` | 稳定 Agent ID |
+| `--enroll-code` | 无 | 首次登记的一次性注册码 |
+| `--credentials` | `/etc/labops-agent/credentials.json` | 独立设备凭据文件 |
+| `--id` | 服务端签发 | 稳定 Agent ID |
 | `--name` | `hostname` | 设备显示名称 |
 | `--group` | `default` | 设备分组 |
 | `--mock-profile` | `ubuntu` | 模拟设备类型 |

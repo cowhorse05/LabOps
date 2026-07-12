@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { App, Form, Input, Modal } from 'antd';
 import { LockOutlined } from '@ant-design/icons';
 import { authApi } from '@/api/labops';
-import { useAuthStore } from '@/stores/auth';
 import type { AxiosError } from 'axios';
 
 interface ChangePasswordModalProps {
@@ -13,7 +12,6 @@ interface ChangePasswordModalProps {
 export default function ChangePasswordModal({ open, onClose }: ChangePasswordModalProps) {
   const [form] = Form.useForm();
   const { message } = App.useApp();
-  const updateToken = useAuthStore((s) => s.updateToken);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -24,8 +22,7 @@ export default function ChangePasswordModal({ open, onClose }: ChangePasswordMod
     try {
       const values = await form.validateFields();
       setLoading(true);
-      const result = await authApi.changePassword(values.oldPassword, values.newPassword);
-      updateToken(result.token);
+      await authApi.changePassword(values.oldPassword, values.newPassword);
       message.success('密码修改成功');
       onClose();
     } catch (err) {
@@ -62,10 +59,10 @@ export default function ChangePasswordModal({ open, onClose }: ChangePasswordMod
           name="newPassword"
           rules={[
             { required: true, message: '请输入新密码' },
-            { min: 4, message: '密码至少 4 个字符' },
+            { min: 12, message: '密码至少 12 个字符' },
           ]}
         >
-          <Input.Password prefix={<LockOutlined />} placeholder="新密码（至少 4 个字符）" />
+          <Input.Password prefix={<LockOutlined />} placeholder="新密码（至少 12 个字符）" />
         </Form.Item>
         <Form.Item
           name="confirmPassword"

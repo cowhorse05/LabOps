@@ -17,4 +17,4 @@ fi
 
 echo "Using container runtime: $RUNTIME"
 echo "Starting LabOps demo with Docker Compose..."
-"$RUNTIME" compose up --build
+"$RUNTIME" compose -f compose.dev.yaml up --build

@@ -7,14 +7,14 @@ import { useAuthStore } from '@/stores/auth';
 
 export default function LoginPage() {
   const { message } = App.useApp();
-  const token = useAuthStore((s) => s.token);
+  const user = useAuthStore((s) => s.user);
   const mustChangePwd = useAuthStore((s) => s.mustChangePassword);
   const setAuth = useAuthStore((s) => s.setAuth);
   const [loading, setLoading] = useState(false);
   const [changing, setChanging] = useState(false);
 
   // Already logged in and no forced change — go to dashboard
-  if (token && !mustChangePwd) {
+  if (user && !mustChangePwd) {
     return <Navigate to="/" replace />;
   }
 
@@ -22,7 +22,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const result = await authApi.login(values.username, values.password);
-      setAuth(result.token, result.user, result.mustChangePassword ?? false);
+      setAuth(result.user, result.mustChangePassword ?? false);
       if (result.mustChangePassword) {
         message.warning('Please change your password before continuing');
       }
@@ -36,9 +36,9 @@ export default function LoginPage() {
   async function handleChangePassword(values: { oldPassword: string; newPassword: string }) {
     setChanging(true);
     try {
-      const result = await authApi.changePassword(values.oldPassword, values.newPassword);
+      await authApi.changePassword(values.oldPassword, values.newPassword);
       // Clear the mustChangePassword flag
-      setAuth(result.token, useAuthStore.getState().user!, false);
+      setAuth(useAuthStore.getState().user!, false);
       message.success('Password changed successfully');
     } catch (err: any) {
       const msg = err?.response?.data?.error || 'Failed to change password';
@@ -49,7 +49,7 @@ export default function LoginPage() {
   }
 
   // Show change password form if forced
-  if (token && mustChangePwd) {
+  if (user && mustChangePwd) {
     return (
       <div className="login-page">
         <div className="login-panel" style={{ maxWidth: 400 }}>
@@ -66,9 +66,9 @@ export default function LoginPage() {
             </Form.Item>
             <Form.Item name="newPassword" rules={[
               { required: true, message: 'Enter new password' },
-              { min: 4, message: 'At least 4 characters' },
+              { min: 12, message: 'At least 12 characters' },
             ]}>
-              <Input.Password prefix={<LockOutlined />} placeholder="New password (min 4 chars)" />
+              <Input.Password prefix={<LockOutlined />} placeholder="New password (min 12 chars)" />
             </Form.Item>
             <Form.Item>
               <Button type="primary" htmlType="submit" block loading={changing}>

@@ -27,11 +27,11 @@ We follow a coordinated disclosure process:
 
 LabOps is an MVP/demo project. The following points are important for anyone deploying it:
 
-- **Default credentials are for local development only.** The demo login (`admin / admin`) and default tokens in `.env.example` are not suitable for production. Change `LABOPS_WEB_TOKEN` and `LABOPS_AGENT_TOKEN` before any deployment that is accessible from a network.
+- **There are no production default credentials.** Production startup requires an operator-supplied bootstrap password and rejects the legacy `admin/admin` password.
 - **Agent command execution runs with the agent process's permissions.** Commands dispatched to agents execute under the user account running the agent binary. Use OS-level sandboxing (containers, restricted service accounts, AppArmor/SELinux profiles) to limit the blast radius.
-- **WebSocket connections are not encrypted by default.** The agent channel and REST API use plain HTTP/WS in the demo setup. Place LabOps behind a reverse proxy (e.g., nginx, Caddy) with TLS termination for any network-exposed deployment.
+- **Network-exposed deployments require HTTPS/WSS.** The production Compose publishes only Nginx ports 80/443 and keeps MySQL/Server on an internal network.
 - **SQLite has no built-in access control.** The database file is protected only by filesystem permissions. Ensure the database file (`data/labops.db`) is not served or exposed by the web server.
-- **Token-based authentication is simple bearer tokens.** Treat these tokens as secrets. Do not hardcode them in client-side code or commit them to version control.
+- **Device credentials are unique and revocable.** Enrollment codes and device secrets are only returned once; revoke a lost or decommissioned device immediately.
 
 ## Scope
 

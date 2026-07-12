@@ -1,0 +1,9 @@
+[Unit]
+Description=LabOps verified MySQL backup
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/labops
+Environment=LABOPS_BACKUP_DIR=/var/backups/labops
+ExecStart=/usr/bin/bash /opt/labops/scripts/backup.sh

@@ -2,21 +2,23 @@ package core
 
 import (
 	"context"
-	"fmt"
+	"crypto/subtle"
 	"log"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
 )
 
 type Config struct {
+	Environment      string
+	PublicOrigin     string
+	SecureCookies    bool
+	EncryptionKey    string
 	AgentToken       string
 	WebToken         string
-	JWTSecret        string
 	HeartbeatTimeout time.Duration
 	TaskTimeout      time.Duration
 	LLMURL           string
@@ -73,16 +75,19 @@ func NewApp(store *Store, config Config) *App {
 	if config.TaskTimeout == 0 {
 		config.TaskTimeout = 2 * time.Minute
 	}
-	if config.JWTSecret == "" {
-		config.JWTSecret = "labops-jwt-secret-change-in-production"
-	}
 	app := &App{
 		store:        store,
 		config:       config,
 		clients:      make(map[string]*AgentClient),
 		rateLimiters: make(map[string]*rateLimiter),
 		upgrader: websocket.Upgrader{
-			CheckOrigin: func(r *http.Request) bool { return true },
+			CheckOrigin: func(r *http.Request) bool {
+				if r == nil {
+					return config.Environment == ""
+				}
+				origin := r.Header.Get("Origin")
+				return origin == "" || config.PublicOrigin == "" || origin == config.PublicOrigin
+			},
 		},
 	}
 	app.analyzer = NewAnalyzer(store, config)
@@ -109,17 +114,29 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/health", a.handleHealth)
 	mux.HandleFunc("POST /api/auth/login", a.handleLogin)
 	mux.HandleFunc("POST /api/auth/change-password", a.handleChangePassword)
+	mux.HandleFunc("POST /api/auth/logout", a.handleLogout)
 	mux.HandleFunc("GET /api/auth/me", a.handleMe)
+	mux.HandleFunc("GET /api/users", a.handleListUsers)
+	mux.HandleFunc("POST /api/users", a.handleCreateUser)
+	mux.HandleFunc("PUT /api/users/{id}", a.handleUpdateUser)
 	mux.HandleFunc("GET /api/stats", a.handleStats)
 	mux.HandleFunc("GET /api/devices", a.handleListDevices)
 	mux.HandleFunc("GET /api/devices/{id}", a.handleGetDevice)
 	mux.HandleFunc("GET /api/devices/{id}/tasks", a.handleListDeviceTasks)
 	mux.HandleFunc("POST /api/devices", a.handleCreateDevice)
 	mux.HandleFunc("DELETE /api/devices/{id}", a.handleDeleteDevice)
+	mux.HandleFunc("POST /api/devices/{id}/revoke", a.handleRevokeDevice)
+	mux.HandleFunc("GET /api/enrollment-codes", a.handleListEnrollmentCodes)
+	mux.HandleFunc("POST /api/enrollment-codes", a.handleCreateEnrollmentCode)
+	mux.HandleFunc("DELETE /api/enrollment-codes/{id}", a.handleRevokeEnrollmentCode)
+	mux.HandleFunc("POST /api/agent/enroll", a.handleAgentEnroll)
 	mux.HandleFunc("GET /api/groups", a.handleGroups)
 	mux.HandleFunc("GET /api/tasks", a.handleListTasks)
 	mux.HandleFunc("POST /api/tasks", a.handleCreateTask)
 	mux.HandleFunc("GET /api/tasks/{id}", a.handleGetTask)
+	mux.HandleFunc("GET /api/command-templates", a.handleListCommandTemplates)
+	mux.HandleFunc("POST /api/command-templates", a.handleCreateCommandTemplate)
+	mux.HandleFunc("PUT /api/command-templates/{id}", a.handleUpdateCommandTemplate)
 	mux.HandleFunc("GET /api/audit-logs", a.handleAuditLogs)
 	mux.HandleFunc("GET /api/aiops/report", a.handleAiOpsReport)
 	mux.HandleFunc("GET /api/aiops/llm-config", a.handleGetLLMConfig)
@@ -129,18 +146,29 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/aiops/auto-mode", a.handleGetAutoMode)
 	mux.HandleFunc("PUT /api/aiops/auto-mode", a.handleSaveAutoMode)
 	mux.HandleFunc("GET /api/agent/ws", a.handleAgentWS)
-	return a.withCORS(a.withRateLimit(a.withAuth(mux)))
+	return a.withRequestID(a.withCORS(a.withRateLimit(a.withAuth(mux))))
 }
 
 func (a *App) withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if origin == "" {
-			origin = "*"
+		allowedOrigin := a.config.PublicOrigin
+		if a.config.Environment == "" && allowedOrigin == "" {
+			allowedOrigin = origin
+			if allowedOrigin == "" {
+				allowedOrigin = "*"
+			}
 		}
-		w.Header().Set("Access-Control-Allow-Origin", origin)
+		if origin != "" && allowedOrigin != "*" && origin != allowedOrigin {
+			writeAPIError(w, http.StatusForbidden, "ORIGIN_NOT_ALLOWED", "origin is not allowed")
+			return
+		}
+		if allowedOrigin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Authorization,Content-Type")
+		w.Header().Set("Access-Control-Allow-Headers", "Authorization,Content-Type,X-CSRF-Token,X-Request-ID")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Vary", "Origin")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -153,73 +181,105 @@ func (a *App) withCORS(next http.Handler) http.Handler {
 func (a *App) withAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodOptions ||
-			strings.HasPrefix(r.URL.Path, "/api/agent/") ||
+			r.URL.Path == "/api/agent/enroll" ||
+			r.URL.Path == "/api/agent/ws" ||
 			r.URL.Path == "/api/health" ||
 			r.URL.Path == "/api/auth/login" {
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		authHeader := r.Header.Get("Authorization")
-		if !strings.HasPrefix(authHeader, "Bearer ") {
-			// When no WebToken is configured, allow unauthenticated access
-			if a.config.WebToken == "" {
-				next.ServeHTTP(w, r)
+		// Legacy auth is intentionally reachable only from explicit internal test
+		// configuration. Production main never sets WebToken.
+		if a.config.WebToken != "" && r.Header.Get("Authorization") == "Bearer "+a.config.WebToken {
+			ctx := context.WithValue(r.Context(), authContextKey{}, authContext{User: a.store.AdminUser(), Legacy: true})
+			next.ServeHTTP(w, r.WithContext(ctx))
+			return
+		}
+		if a.config.Environment == "" && a.config.WebToken == "" {
+			ctx := context.WithValue(r.Context(), authContextKey{}, authContext{User: a.store.AdminUser(), Legacy: true})
+			next.ServeHTTP(w, r.WithContext(ctx))
+			return
+		}
+		cookie, err := r.Cookie(sessionCookieName)
+		if err != nil || cookie.Value == "" {
+			writeAPIError(w, http.StatusUnauthorized, "AUTH_REQUIRED", "authentication required")
+			return
+		}
+		user, sessionID, csrfHash, ok, err := a.store.AuthenticateWebSession(r.Context(), cookie.Value)
+		if err != nil {
+			writeAPIError(w, http.StatusInternalServerError, "AUTH_SESSION_ERROR", "unable to validate session")
+			return
+		}
+		if !ok {
+			clearAuthCookies(w, a.config.SecureCookies)
+			writeAPIError(w, http.StatusUnauthorized, "SESSION_EXPIRED", "session expired")
+			return
+		}
+		if isStateChanging(r.Method) && !isCSRFExempt(r.URL.Path) {
+			csrfCookie, cookieErr := r.Cookie(csrfCookieName)
+			headerToken := r.Header.Get("X-CSRF-Token")
+			if cookieErr != nil || headerToken == "" || csrfCookie.Value != headerToken ||
+				subtle.ConstantTimeCompare([]byte(tokenHash(headerToken)), []byte(csrfHash)) != 1 {
+				writeAPIError(w, http.StatusForbidden, "CSRF_INVALID", "invalid CSRF token")
 				return
 			}
-			writeError(w, http.StatusUnauthorized, "missing or invalid token")
+		}
+		if a.store.MustChangePassword(r.Context(), user.Username) && r.URL.Path != "/api/auth/change-password" && r.URL.Path != "/api/auth/me" && r.URL.Path != "/api/auth/logout" {
+			writeAPIError(w, http.StatusForbidden, "PASSWORD_CHANGE_REQUIRED", "password change required")
 			return
 		}
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-
-		// Allow the static WebToken for backward compatibility
-		if a.config.WebToken != "" && tokenString == a.config.WebToken {
-			next.ServeHTTP(w, r)
+		if permission := requiredPermission(r); permission != "" && !HasPermission(user, permission) {
+			writeAPIError(w, http.StatusForbidden, "PERMISSION_DENIED", "permission denied")
 			return
 		}
-
-		// Validate JWT
-		token, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
-			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-			}
-			return []byte(a.config.JWTSecret), nil
-		})
-		if err != nil || !token.Valid {
-			writeError(w, http.StatusUnauthorized, "missing or invalid token")
-			return
-		}
-
-		// Server-side enforcement: users with must_change_password can only access
-		// the password-change and /auth/me endpoints. This closes the gap where
-		// the frontend localStorage flag was the only gatekeeper.
-		if claims, ok := token.Claims.(jwt.MapClaims); ok {
-			if username, _ := claims["username"].(string); username != "" {
-				if r.URL.Path != "/api/auth/change-password" && r.URL.Path != "/api/auth/me" {
-					if a.store.MustChangePassword(r.Context(), username) {
-						writeError(w, http.StatusForbidden, "password change required")
-						return
-					}
-				}
-			}
-		}
-
-		next.ServeHTTP(w, r)
+		ctx := context.WithValue(r.Context(), authContextKey{}, authContext{User: user, SessionID: sessionID})
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func requiredPermission(r *http.Request) string {
+	path := r.URL.Path
+	if strings.HasPrefix(path, "/api/users") {
+		return PermissionUserManage
+	}
+	if strings.HasPrefix(path, "/api/enrollment-codes") {
+		return PermissionEnrollManage
+	}
+	if strings.HasSuffix(path, "/revoke") && strings.HasPrefix(path, "/api/devices/") {
+		return PermissionDeviceRevoke
+	}
+	if strings.HasPrefix(path, "/api/devices") && r.Method != http.MethodGet {
+		return PermissionDeviceRevoke
+	}
+	if strings.HasPrefix(path, "/api/command-templates") && r.Method != http.MethodGet {
+		return PermissionTemplateManage
+	}
+	if strings.Contains(path, "/aiops/llm-") || strings.Contains(path, "/aiops/auto-mode") || strings.Contains(path, "/aiops/recommendations/") {
+		return PermissionLLMManage
+	}
+	if r.Method == http.MethodGet || path == "/api/auth/change-password" || path == "/api/auth/logout" {
+		return PermissionRead
+	}
+	return ""
 }
 
 func (a *App) withRateLimit(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ip := r.RemoteAddr
-		// Strip port if present.
-		if idx := strings.LastIndex(ip, ":"); idx != -1 {
-			ip = ip[:idx]
+		ip := clientIP(r)
+		key := "general:" + ip
+		maxTokens := 60
+		interval := time.Second
+		if r.URL.Path == "/api/auth/login" {
+			key, maxTokens, interval = "login:"+ip, 5, 3*time.Minute
+		} else if r.URL.Path == "/api/agent/enroll" {
+			key, maxTokens, interval = "enroll:"+ip, 10, time.Minute
 		}
 		a.rlMu.Lock()
-		rl, exists := a.rateLimiters[ip]
+		rl, exists := a.rateLimiters[key]
 		if !exists {
-			rl = newRateLimiter(60, time.Second)
-			a.rateLimiters[ip] = rl
+			rl = newRateLimiter(maxTokens, interval)
+			a.rateLimiters[key] = rl
 		}
 		// Hold rlMu through allow() to prevent data races on the rateLimiter fields
 		// when concurrent requests arrive from the same IP.
@@ -242,6 +302,9 @@ func (a *App) refreshState(ctx context.Context) {
 	if err := a.store.TimeoutTasks(ctx, taskCutoff); err != nil {
 		log.Printf("timeout tasks error: %v", err)
 	}
+	if err := a.store.PruneExpiredWebSessions(ctx); err != nil {
+		log.Printf("prune web sessions error: %v", err)
+	}
 }
 
 func (a *App) maintenanceLoop() {
@@ -255,6 +318,18 @@ func (a *App) maintenanceLoop() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			a.refreshState(ctx)
 			cancel()
+			a.pruneRateLimiters()
 		}
 	}
+}
+
+func (a *App) pruneRateLimiters() {
+	cutoff := time.Now().Add(-30 * time.Minute)
+	a.rlMu.Lock()
+	for key, limiter := range a.rateLimiters {
+		if limiter.last.Before(cutoff) {
+			delete(a.rateLimiters, key)
+		}
+	}
+	a.rlMu.Unlock()
 }

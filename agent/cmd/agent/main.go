@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -31,13 +32,17 @@ import (
 const version = "0.1.0"
 
 type config struct {
-	ServerURL   string
-	Token       string
-	AgentID     string
-	Name        string
-	GroupName   string
-	MockProfile string
-	RealMetrics bool
+	ServerURL       string
+	Token           string
+	DeviceSecret    string
+	EnrollCode      string
+	CredentialsPath string
+	AgentID         string
+	Name            string
+	GroupName       string
+	MockProfile     string
+	RealMetrics     bool
+	EnrollOnly      bool
 }
 
 type envelope struct {
@@ -71,8 +76,18 @@ type heartbeatPayload struct {
 }
 
 type commandPayload struct {
-	TaskID  string `json:"taskId"`
-	Command string `json:"command"`
+	ProtocolVersion int      `json:"protocolVersion"`
+	TaskID          string   `json:"taskId"`
+	Kind            string   `json:"kind"`
+	Command         string   `json:"command"`
+	Executable      string   `json:"executable"`
+	Args            []string `json:"args"`
+	TimeoutSeconds  int      `json:"timeoutSeconds"`
+}
+
+type storedCredentials struct {
+	DeviceID     string `json:"deviceId"`
+	DeviceSecret string `json:"deviceSecret"`
 }
 
 type taskResultPayload struct {
@@ -86,6 +101,23 @@ type taskResultPayload struct {
 
 func main() {
 	cfg := parseFlags()
+	if cfg.EnrollCode != "" {
+		credentials, err := enroll(cfg)
+		if err != nil {
+			log.Fatalf("agent enrollment failed: %v", err)
+		}
+		if err := saveCredentials(cfg.CredentialsPath, credentials); err != nil {
+			log.Fatalf("save agent credentials: %v", err)
+		}
+		cfg.AgentID, cfg.DeviceSecret = credentials.DeviceID, credentials.DeviceSecret
+		log.Printf("agent enrolled as %s", cfg.AgentID)
+		if cfg.EnrollOnly {
+			return
+		}
+	}
+	if cfg.DeviceSecret == "" && cfg.Token == "" {
+		log.Fatal("agent has no device credential; run with --enroll-code first")
+	}
 	backoff := 1 * time.Second
 	const maxBackoff = 60 * time.Second
 	for {
@@ -106,18 +138,30 @@ func parseFlags() config {
 	hostname, _ := os.Hostname()
 	cfg := config{}
 	flag.StringVar(&cfg.ServerURL, "server", env("LABOPS_SERVER_URL", "http://localhost:8080"), "LabOps server URL")
-	flag.StringVar(&cfg.Token, "token", env("LABOPS_AGENT_TOKEN", "dev-agent-token"), "agent token")
+	flag.StringVar(&cfg.Token, "token", env("LABOPS_AGENT_TOKEN", ""), "legacy shared agent token")
+	flag.StringVar(&cfg.DeviceSecret, "device-secret", env("LABOPS_DEVICE_SECRET", ""), "per-device secret")
+	flag.StringVar(&cfg.EnrollCode, "enroll-code", env("LABOPS_ENROLLMENT_CODE", ""), "one-time enrollment code")
+	flag.StringVar(&cfg.CredentialsPath, "credentials", env("LABOPS_AGENT_CREDENTIALS", defaultCredentialsPath()), "credentials file path")
 	flag.StringVar(&cfg.Name, "name", env("LABOPS_AGENT_NAME", hostname), "device name")
 	flag.StringVar(&cfg.GroupName, "group", env("LABOPS_AGENT_GROUP", "default"), "device group")
 	flag.StringVar(&cfg.MockProfile, "mock-profile", env("LABOPS_MOCK_PROFILE", "ubuntu"), "mock profile")
 	flag.StringVar(&cfg.AgentID, "id", env("LABOPS_AGENT_ID", ""), "stable agent id")
 	var realMetrics bool
+	var enrollOnly bool
 	flag.BoolVar(&realMetrics, "real", parseBoolEnv("LABOPS_AGENT_REAL"), "collect real system metrics instead of mock data")
+	flag.BoolVar(&enrollOnly, "enroll-only", false, "enroll, save credentials, and exit")
 	flag.Parse()
+	if cfg.DeviceSecret == "" {
+		if credentials, err := loadCredentials(cfg.CredentialsPath); err == nil {
+			cfg.AgentID, cfg.DeviceSecret = credentials.DeviceID, credentials.DeviceSecret
+			cfg.Token = ""
+		}
+	}
 	if cfg.AgentID == "" {
 		cfg.AgentID = "agent-" + sanitizeID(cfg.Name)
 	}
 	cfg.RealMetrics = realMetrics
+	cfg.EnrollOnly = enrollOnly
 	return cfg
 }
 
@@ -128,7 +172,9 @@ func run(cfg config) error {
 	}
 	log.Printf("connecting to %s as %s", cfg.ServerURL, cfg.Name)
 	header := http.Header{}
-	if cfg.Token != "" {
+	if cfg.DeviceSecret != "" && cfg.AgentID != "" {
+		header.Set("Authorization", "Agent "+cfg.AgentID+":"+cfg.DeviceSecret)
+	} else if cfg.Token != "" {
 		header.Set("X-Agent-Token", cfg.Token)
 	}
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, header)
@@ -190,7 +236,7 @@ func run(cfg config) error {
 				log.Printf("invalid command payload: %v", err)
 				continue
 			}
-			if cmd.TaskID == "" || cmd.Command == "" {
+			if cmd.TaskID == "" || (cmd.Kind == "template" && cmd.Executable == "") || (cmd.Kind != "template" && cmd.Command == "") {
 				_ = send(envelope{Type: "task_result", Payload: taskResultPayload{
 					TaskID: cmd.TaskID, Status: "failed", Stderr: "empty taskId or command",
 					ExitCode: 1,
@@ -244,7 +290,7 @@ func executeAndReport(send func(any) error, command commandPayload) {
 		}
 	}()
 	start := time.Now()
-	stdout, stderr, exitCode := executeCommand(command.Command)
+	stdout, stderr, exitCode := executePayload(command)
 	status := "success"
 	if exitCode != 0 {
 		status = "failed"
@@ -264,18 +310,38 @@ func executeAndReport(send func(any) error, command commandPayload) {
 
 const (
 	maxStdoutSize = 256 * 1024 // 256KB
-	maxStderrSize = 64 * 1024  // 64KB
+	maxStderrSize = 256 * 1024 // 256KB
 )
 
 func executeCommand(command string) (string, string, int) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	return executeProcess(commandPayload{Kind: "ad_hoc", Command: command, TimeoutSeconds: 30})
+}
+
+func executePayload(payload commandPayload) (string, string, int) {
+	if payload.TimeoutSeconds < 1 {
+		payload.TimeoutSeconds = 30
+	}
+	if payload.TimeoutSeconds > 300 {
+		payload.TimeoutSeconds = 300
+	}
+	return executeProcess(payload)
+}
+
+func executeProcess(payload commandPayload) (string, string, int) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(payload.TimeoutSeconds)*time.Second)
 	defer cancel()
 	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		cmd = exec.CommandContext(ctx, "cmd", "/C", command)
+	if payload.Kind == "template" {
+		if !filepath.IsAbs(payload.Executable) {
+			return "", "template executable must be an absolute path", 126
+		}
+		cmd = exec.CommandContext(ctx, payload.Executable, payload.Args...)
+	} else if runtime.GOOS == "windows" {
+		cmd = exec.CommandContext(ctx, "cmd", "/C", payload.Command)
 	} else {
-		cmd = exec.CommandContext(ctx, "/bin/sh", "-c", command)
+		cmd = exec.CommandContext(ctx, "/bin/sh", "-c", payload.Command)
 	}
+	cmd.Env = append(os.Environ(), "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C.UTF-8")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -285,7 +351,7 @@ func executeCommand(command string) (string, string, int) {
 	stderrStr := truncateOutput(&stderr, maxStderrSize)
 
 	if ctx.Err() == context.DeadlineExceeded {
-		return stdoutStr, "command timed out after 30s", 124
+		return stdoutStr, fmt.Sprintf("command timed out after %ds", payload.TimeoutSeconds), 124
 	}
 	if err == nil {
 		return stdoutStr, stderrStr, 0
@@ -294,6 +360,82 @@ func executeCommand(command string) (string, string, int) {
 		return stdoutStr, stderrStr, exitErr.ExitCode()
 	}
 	return stdoutStr, err.Error(), 1
+}
+
+func defaultCredentialsPath() string {
+	if runtime.GOOS == "windows" {
+		base := os.Getenv("ProgramData")
+		if base == "" {
+			base = "."
+		}
+		return filepath.Join(base, "LabOps", "credentials.json")
+	}
+	return "/etc/labops-agent/credentials.json"
+}
+
+func loadCredentials(path string) (storedCredentials, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return storedCredentials{}, err
+	}
+	var credentials storedCredentials
+	if err := json.Unmarshal(data, &credentials); err != nil {
+		return storedCredentials{}, err
+	}
+	if credentials.DeviceID == "" || credentials.DeviceSecret == "" {
+		return storedCredentials{}, fmt.Errorf("credentials file is incomplete")
+	}
+	return credentials, nil
+}
+
+func saveCredentials(path string, credentials storedCredentials) error {
+	if path == "" {
+		return fmt.Errorf("credentials path is required")
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(credentials, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o600)
+}
+
+func enroll(cfg config) (storedCredentials, error) {
+	endpoint := strings.TrimRight(cfg.ServerURL, "/") + "/api/agent/enroll"
+	payload := map[string]any{"code": cfg.EnrollCode, "device": buildRegister(cfg)}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return storedCredentials{}, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return storedCredentials{}, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return storedCredentials{}, err
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return storedCredentials{}, err
+	}
+	if resp.StatusCode != http.StatusCreated {
+		return storedCredentials{}, fmt.Errorf("server returned %s: %s", resp.Status, strings.TrimSpace(string(data)))
+	}
+	var result storedCredentials
+	if err := json.Unmarshal(data, &result); err != nil {
+		return storedCredentials{}, err
+	}
+	if result.DeviceID == "" || result.DeviceSecret == "" {
+		return storedCredentials{}, fmt.Errorf("server returned incomplete credentials")
+	}
+	return result, nil
 }
 
 func truncateOutput(buf *bytes.Buffer, limit int64) string {

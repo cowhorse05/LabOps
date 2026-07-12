@@ -31,23 +31,43 @@ func main() {
 		log.Fatalf("open store: %v", err)
 	}
 	defer store.Close()
+	if err := store.ConfigureEncryptionKey(os.Getenv("LABOPS_ENCRYPTION_KEY")); err != nil {
+		log.Fatalf("configure encryption: %v", err)
+	}
 
-	if err := store.Init(ctx); err != nil {
+	if err := store.InitSecure(ctx, os.Getenv("LABOPS_BOOTSTRAP_ADMIN_PASSWORD")); err != nil {
 		log.Fatalf("init store: %v", err)
+	}
+	if err := store.ProtectStoredLLMSecret(ctx); err != nil {
+		log.Fatalf("protect stored LLM secret: %v", err)
+	}
+	environment := env("LABOPS_ENV", "development")
+	publicOrigin := env("LABOPS_PUBLIC_ORIGIN", "http://localhost:5173")
+	if environment == "production" && os.Getenv("LABOPS_PUBLIC_ORIGIN") == "" {
+		log.Fatal("LABOPS_PUBLIC_ORIGIN is required in production")
+	}
+	if environment == "production" && os.Getenv("LABOPS_ENCRYPTION_KEY") == "" {
+		log.Fatal("LABOPS_ENCRYPTION_KEY is required in production")
 	}
 
 	app := core.NewApp(store, core.Config{
-		AgentToken:       env("LABOPS_AGENT_TOKEN", "dev-agent-token"),
-		WebToken:         env("LABOPS_WEB_TOKEN", "dev-token"),
-		HeartbeatTimeout: 35 * time.Second,
-		TaskTimeout:      2 * time.Minute,
+		Environment:      environment,
+		PublicOrigin:     publicOrigin,
+		SecureCookies:    environment == "production",
+		EncryptionKey:    os.Getenv("LABOPS_ENCRYPTION_KEY"),
+		HeartbeatTimeout: envDuration("LABOPS_HEARTBEAT_TIMEOUT", 35*time.Second),
+		TaskTimeout:      envDuration("LABOPS_TASK_TIMEOUT", 5*time.Minute),
 		LLMURL:           env("LABOPS_LLM_URL", ""),
 		LLMAPIKey:        env("LABOPS_LLM_API_KEY", ""),
 	})
 
 	srv := &http.Server{
-		Addr:    addr,
-		Handler: app.Handler(),
+		Addr:              addr,
+		Handler:           app.Handler(),
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      2 * time.Minute,
+		IdleTimeout:       2 * time.Minute,
 	}
 
 	go func() {
@@ -66,6 +86,18 @@ func main() {
 		log.Fatalf("listen: %v", err)
 	}
 	log.Println("server stopped")
+}
+
+func envDuration(key string, fallback time.Duration) time.Duration {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := time.ParseDuration(value)
+	if err != nil {
+		log.Fatalf("invalid %s: %v", key, err)
+	}
+	return parsed
 }
 
 func env(key, fallback string) string {

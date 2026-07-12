@@ -15,4 +15,4 @@ if (Get-Command podman -ErrorAction SilentlyContinue) {
 
 Write-Host "Using container runtime: $runtime" -ForegroundColor Cyan
 Write-Host "Starting LabOps demo with Docker Compose..."
-& $runtime compose up --build
+& $runtime compose -f compose.dev.yaml up --build

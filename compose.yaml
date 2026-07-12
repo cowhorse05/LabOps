@@ -1,108 +1,69 @@
+name: labops
+
 services:
   mysql:
     image: mysql:8.0
+    restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: labops
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
       MYSQL_DATABASE: labops
       MYSQL_USER: labops
-      MYSQL_PASSWORD: labops
-    ports:
-      - "3307:3306"
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}
     volumes:
       - mysql-data:/var/lib/mysql
+    networks: [backend]
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 5s
-      timeout: 3s
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
       retries: 20
 
   server:
-    build:
-      context: ./server
+    image: labops-server:${LABOPS_VERSION:-dev}
+    build: { context: ./server }
+    restart: unless-stopped
     environment:
+      LABOPS_ENV: production
       LABOPS_ADDR: ":8080"
       LABOPS_DB_DRIVER: mysql
-      LABOPS_MYSQL_DSN: labops:labops@tcp(mysql:3306)/labops?parseTime=true&charset=utf8mb4
-      LABOPS_AGENT_TOKEN: dev-agent-token
-      LABOPS_WEB_TOKEN: dev-token
-    ports:
-      - "8080:8080"
+      LABOPS_MYSQL_DSN: ${LABOPS_MYSQL_DSN:?set LABOPS_MYSQL_DSN in .env}
+      LABOPS_BOOTSTRAP_ADMIN_PASSWORD: ${LABOPS_BOOTSTRAP_ADMIN_PASSWORD:-}
+      LABOPS_ENCRYPTION_KEY: ${LABOPS_ENCRYPTION_KEY:?set LABOPS_ENCRYPTION_KEY in .env}
+      LABOPS_PUBLIC_ORIGIN: https://${SERVER_HOST:?set SERVER_HOST in .env}
+      LABOPS_HEARTBEAT_TIMEOUT: 35s
+      LABOPS_TASK_TIMEOUT: 5m
     depends_on:
-      mysql:
-        condition: service_healthy
+      mysql: { condition: service_healthy }
+    networks: [backend, egress]
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/health"]
-      interval: 10s
-      timeout: 3s
+      interval: 15s
+      timeout: 5s
       retries: 10
 
   web:
-    build:
-      context: ./web
+    image: labops-web:${LABOPS_VERSION:-dev}
+    build: { context: ./web }
+    restart: unless-stopped
     environment:
-      VITE_PROXY_TARGET: http://server:8080
+      SERVER_HOST: ${SERVER_HOST:?set SERVER_HOST in .env}
+      TLS_CERT_PATH: /etc/letsencrypt/live/${SERVER_HOST}/fullchain.pem
+      TLS_KEY_PATH: /etc/letsencrypt/live/${SERVER_HOST}/privkey.pem
     ports:
-      - "5173:5173"
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - ./deploy/acme-webroot:/var/www/certbot
     depends_on:
-      server:
-        condition: service_healthy
+      server: { condition: service_healthy }
+    networks: [backend, edge]
 
-  agent-lab-pc-01:
-    build:
-      context: ./agent
-    command:
-      - --server=http://server:8080
-      - --token=dev-agent-token
-      - --id=agent-lab-pc-01
-      - --name=lab-pc-01
-      - --group=classroom-a
-      - --mock-profile=windows-lab
-    depends_on:
-      server:
-        condition: service_healthy
-
-  agent-lab-pc-02:
-    build:
-      context: ./agent
-    command:
-      - --server=http://server:8080
-      - --token=dev-agent-token
-      - --id=agent-lab-pc-02
-      - --name=lab-pc-02
-      - --group=classroom-a
-      - --mock-profile=ubuntu
-    depends_on:
-      server:
-        condition: service_healthy
-
-  agent-server-01:
-    build:
-      context: ./agent
-    command:
-      - --server=http://server:8080
-      - --token=dev-agent-token
-      - --id=agent-server-01
-      - --name=ubuntu-server-01
-      - --group=homelab
-      - --mock-profile=server
-    depends_on:
-      server:
-        condition: service_healthy
-
-  agent-edge-01:
-    build:
-      context: ./agent
-    command:
-      - --server=http://server:8080
-      - --token=dev-agent-token
-      - --id=agent-edge-01
-      - --name=edge-node-01
-      - --group=edge
-      - --mock-profile=edge-node
-    depends_on:
-      server:
-        condition: service_healthy
+networks:
+  backend:
+    internal: true
+  egress: {}
+  edge: {}
 
 volumes:
-  labops-data:
   mysql-data:

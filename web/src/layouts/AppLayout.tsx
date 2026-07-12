@@ -11,6 +11,9 @@ import {
   LogoutOutlined,
   ProfileOutlined,
   ReloadOutlined,
+  SafetyCertificateOutlined,
+  TeamOutlined,
+  CodeOutlined,
 } from '@ant-design/icons';
 import { authApi } from '@/api/labops';
 import { useAuthStore } from '@/stores/auth';
@@ -18,7 +21,7 @@ import ChangePasswordModal from '@/components/ChangePasswordModal';
 
 const { Header, Sider, Content } = Layout;
 
-const navItems = [
+const baseNavItems = [
   { key: '/dashboard', icon: <DashboardOutlined />, label: '仪表盘' },
   { key: '/devices', icon: <DesktopOutlined />, label: '设备' },
   { key: '/groups', icon: <ClusterOutlined />, label: '分组' },
@@ -34,6 +37,13 @@ export default function AppLayout() {
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
   const clear = useAuthStore((s) => s.clear);
+  const hasPermission = (permission: string) => user?.permissions?.includes(permission) ?? false;
+  const navItems = [
+    ...baseNavItems,
+    ...(hasPermission('enrollment:manage') ? [{ key: '/enrollment', icon: <SafetyCertificateOutlined />, label: '设备接入' }] : []),
+    ...(hasPermission('templates:manage') ? [{ key: '/templates', icon: <CodeOutlined />, label: '命令模板' }] : []),
+    ...(hasPermission('users:manage') ? [{ key: '/users', icon: <TeamOutlined />, label: '用户' }] : []),
+  ];
 
   useEffect(() => {
     authApi
@@ -92,6 +102,7 @@ export default function AppLayout() {
                   if (key === 'change-password') {
                     setChangePasswordOpen(true);
                   } else if (key === 'logout') {
+                    void authApi.logout();
                     clear();
                     navigate('/login', { replace: true });
                   }
@@ -102,6 +113,7 @@ export default function AppLayout() {
               <Space size={10} className="user-chip clickable">
                 <Avatar size={30}>{user?.displayName?.[0] || 'A'}</Avatar>
                 <span>{user?.displayName || 'LabOps Admin'}</span>
+                <Tag>{user?.role || 'viewer'}</Tag>
               </Space>
             </Dropdown>
           </Space>

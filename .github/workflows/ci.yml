@@ -24,7 +24,7 @@ jobs:
         run: go vet ./...
 
       - name: go test
-        run: go test ./... -count=1
+        run: go test -race ./... -count=1
 
   agent:
     name: Agent (Go)
@@ -37,13 +37,13 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: "1.24"
 
       - name: go vet
         run: go vet ./...
 
       - name: go test
-        run: go test ./... -count=1
+        run: go test -race ./... -count=1
 
   web:
     name: Web (TypeScript)
@@ -64,5 +64,28 @@ jobs:
       - name: type check
         run: npx tsc --noEmit
 
+      - name: unit test
+        run: npm test
+
+      - name: production dependency audit
+        run: npm audit --omit=dev
+
       - name: build
         run: npm run build
+
+  containers:
+    name: Containers and Compose
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: validate production compose
+        env:
+          SERVER_HOST: 192.0.2.1
+          MYSQL_ROOT_PASSWORD: ci-root-password
+          MYSQL_PASSWORD: ci-app-password
+          LABOPS_MYSQL_DSN: labops:ci-app-password@tcp(mysql:3306)/labops?parseTime=true&charset=utf8mb4
+          LABOPS_BOOTSTRAP_ADMIN_PASSWORD: ci-bootstrap-password
+          LABOPS_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+        run: docker compose config --quiet
+      - name: build images
+        run: docker build -t labops-server:ci server && docker build -t labops-agent:ci agent && docker build -t labops-web:ci web

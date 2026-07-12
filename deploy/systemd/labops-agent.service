@@ -1,0 +1,27 @@
+[Unit]
+Description=LabOps low-privilege device agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=labops-agent
+Group=labops-agent
+EnvironmentFile=/etc/labops-agent/agent.env
+ExecStart=/usr/local/bin/labops-agent --server=${LABOPS_SERVER_URL} --name=${LABOPS_AGENT_NAME} --group=${LABOPS_AGENT_GROUP} --credentials=/etc/labops-agent/credentials.json --real
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+ReadWritePaths=/var/lib/labops-agent
+
+[Install]
+WantedBy=multi-user.target
