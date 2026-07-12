@@ -424,16 +424,45 @@ LabOps/
 
 | Document | Description |
 |----------|-------------|
-| [Architecture Guide](docs/architecture.md) | System architecture, database schema, auth flow, task lifecycle, AI Ops pipeline |
-| [Deployment Guide](docs/deployment-guide.md) | Step-by-step production deployment tutorial (from zero to live) |
-| [Source Code Guide](docs/source-code-guide.md) | Textbook-style reading guide with chapter dependencies |
-| [User Manual](docs/user-manual.md) | End-user guide covering all pages and demo scenarios (Chinese) |
-| [Master Plan](docs/master-plan.md) | Project roadmap, architecture decisions, implementation status |
-| [Product Plan](docs/product-plan.md) | Audience, MVP scope, non-goals, demo scenario |
-| [Roadmap](docs/roadmap.md) | Version roadmap (v0.1 through v0.4) |
-| [Security](docs/security.md) | Security model: sessions, CSRF, enrollment, agent auth, encryption |
-| [Research](docs/research.md) | Competitive analysis of MeshCentral, Tactical RMM, Fleet, Zabbix, etc. |
-| [File Distribution Spec](docs/features/file-distribution/design.md) | v0.3 design document for file push capabilities |
+| **📁 Project** | |
+| [Overview](docs/project/overview.md) | What LabOps is, problems it solves, use cases |
+| [Architecture](docs/project/architecture.md) | System design, DB schema, auth, task lifecycle, AI Ops |
+| [Highlights](docs/project/project-highlights.md) | Technical highlights with code paths and interview talking points |
+| **📁 Deployment** | |
+| [Overview](docs/deployment/overview.md) | Deployment mode comparison and selection guide |
+| [Server Deployment](docs/deployment/server-deployment.md) | ★ Complete tutorial: from zero to live (newbie-friendly) |
+| [Docker Compose](docs/deployment/docker-compose.md) | Docker Compose deployment (dev + production) |
+| [Native Linux](docs/deployment/native-linux.md) | Bare-metal Linux deployment with systemd |
+| [Nginx & HTTPS](docs/deployment/nginx-and-https.md) | Reverse proxy, TLS, certbot configuration |
+| [Agent Deployment](docs/deployment/agent-deployment.md) | Agent installation, enrollment, systemd hardening |
+| **📁 User Guide** | |
+| [Quick Start](docs/user-guide/quick-start.md) | Login, first device, first command |
+| [Devices](docs/user-guide/device-management.md) | Device list, live metrics, groups |
+| [Tasks](docs/user-guide/task-management.md) | Commands, templates, batch dispatch, audit |
+| [AI Ops](docs/user-guide/aiops-usage.md) | Health reports, LLM config, recommendations |
+| **📁 Operations** | |
+| [Data Storage](docs/operations/data-storage.md) | Where every piece of data lives, persistence guarantees |
+| [Backup & Restore](docs/operations/backup-restore.md) | mysqldump, systemd timer, recovery procedures |
+| [Migration](docs/operations/migration.md) | Moving to a new server step-by-step |
+| [Upgrade & Rollback](docs/operations/upgrade-rollback.md) | Version upgrades, rollback strategies |
+| **📁 Troubleshooting** | |
+| [SSH](docs/troubleshooting/ssh.md) | Connection, keys, permissions |
+| [Nginx](docs/troubleshooting/nginx.md) | 502, config errors, port conflicts |
+| [Docker](docs/troubleshooting/docker.md) | Container startup, ports, env vars |
+| [DNS & HTTPS](docs/troubleshooting/dns-and-https.md) | DNS resolution, certificates, ICP filing |
+| [Agent](docs/troubleshooting/agent.md) | Connection, offline, systemd, credentials |
+| **📁 Career** | |
+| [Resume Project](docs/career/resume-project.md) | Resume descriptions for 3 roles, self-intro scripts |
+| [Interview Q&A](docs/career/interview-questions.md) | 40 interview questions with reference answers |
+| [STAR Stories](docs/career/star-stories.md) | 8 real project experience stories |
+| **Other** | |
+| [Source Code Guide](docs/source-code-guide.md) | Textbook-style code reading guide (15 chapters) |
+| [User Manual](docs/user-manual.md) | Comprehensive end-user manual (Chinese) |
+| [Master Plan](docs/master-plan.md) | Project plan SSOT, architecture decisions |
+| [Roadmap](docs/roadmap.md) | Version roadmap (v0.1 → v0.4) |
+| [Security](docs/security.md) | Security model overview |
+| [Research](docs/research.md) | Competitive analysis |
+| [File Distribution](docs/features/file-distribution/design.md) | v0.3 design spec |
 
 ---
 
@@ -446,7 +475,7 @@ git clone https://github.com/cowhorse05/LabOps.git
 cd LabOps
 cp .env.example .env
 # Edit .env — replace every CHANGE_ME value
-# See docs/deployment-guide.md for detailed instructions
+# See docs/deployment/server-deployment.md for detailed instructions
 
 docker compose config --quiet   # Validate
 docker compose build            # Build images
@@ -466,7 +495,7 @@ sudo systemctl start labops-server
 .\scripts\deploy.ps1 -Mode native -InstallDeps
 ```
 
-For complete production deployment instructions including TLS setup, agent installation, backup configuration, and troubleshooting, see the **[Deployment Guide](docs/deployment-guide.md)**.
+For complete production deployment instructions including TLS setup, agent installation, backup configuration, and troubleshooting, see the **[Server Deployment Guide](docs/deployment/server-deployment.md)**.
 
 ---
 

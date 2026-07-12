@@ -424,16 +424,45 @@ LabOps/
 
 | 文档 | 说明 |
 |------|------|
-| [系统架构](docs/architecture.md) | 系统架构、数据库 Schema、认证流程、任务生命周期、AI 运维管线 |
-| [部署指南](docs/deployment-guide.md) | 一步步生产环境部署教程（从零到上线） |
-| [源码阅读指南](docs/source-code-guide.md) | 教科书风格的源码阅读指南，含章节依赖关系 |
-| [用户手册](docs/user-manual.md) | 面向最终用户的完整操作指南（中文） |
-| [项目总体规划](docs/master-plan.md) | 项目路线图、架构决策、实现状态 |
-| [产品规划](docs/product-plan.md) | 目标用户、MVP 范围、非目标、演示场景 |
+| **📁 项目** | |
+| [项目概述](docs/project/overview.md) | LabOps 是什么、解决什么问题、适用场景 |
+| [系统架构](docs/project/architecture.md) | 系统设计、数据库 Schema、认证、任务生命周期、AI Ops |
+| [技术亮点](docs/project/project-highlights.md) | 技术实现细节、代码路径、面试表述 |
+| **📁 部署** | |
+| [部署概览](docs/deployment/overview.md) | 部署方式对比与选择指南 |
+| [服务器部署教程](docs/deployment/server-deployment.md) | ★ 完整教程：从零到上线（新手友好） |
+| [Docker Compose](docs/deployment/docker-compose.md) | Docker Compose 部署（开发 + 生产） |
+| [原生 Linux](docs/deployment/native-linux.md) | 原生 Linux systemd 部署 |
+| [Nginx 与 HTTPS](docs/deployment/nginx-and-https.md) | 反向代理、TLS、证书配置 |
+| [Agent 部署](docs/deployment/agent-deployment.md) | Agent 安装、接入、systemd 加固 |
+| **📁 用户手册** | |
+| [快速开始](docs/user-guide/quick-start.md) | 登录、首台设备、第一条命令 |
+| [设备管理](docs/user-guide/device-management.md) | 设备列表、实时指标、分组 |
+| [任务管理](docs/user-guide/task-management.md) | 命令执行、模板、批量下发、审计 |
+| [AI Ops](docs/user-guide/aiops-usage.md) | 健康报告、LLM 配置、推荐命令 |
+| **📁 运维** | |
+| [数据持久化](docs/operations/data-storage.md) | 每条数据的存储位置、持久化保证 |
+| [备份与恢复](docs/operations/backup-restore.md) | mysqldump、systemd timer、恢复流程 |
+| [服务器迁移](docs/operations/migration.md) | 一步步迁移到新服务器 |
+| [升级与回滚](docs/operations/upgrade-rollback.md) | 版本升级、回滚策略 |
+| **📁 故障排查** | |
+| [SSH](docs/troubleshooting/ssh.md) | 连接、密钥、权限问题 |
+| [Nginx](docs/troubleshooting/nginx.md) | 502、配置错误、端口冲突 |
+| [Docker](docs/troubleshooting/docker.md) | 容器启动、端口、环境变量 |
+| [DNS 与 HTTPS](docs/troubleshooting/dns-and-https.md) | DNS 解析、证书、备案 |
+| [Agent](docs/troubleshooting/agent.md) | 连接、离线、systemd、凭据 |
+| **📁 求职面试** | |
+| [简历项目](docs/career/resume-project.md) | 三个岗位的简历描述、自我介绍 |
+| [面试问答](docs/career/interview-questions.md) | 40 道面试题及参考答案 |
+| [STAR 案例](docs/career/star-stories.md) | 8 个真实项目经历故事 |
+| **其他** | |
+| [源码阅读指南](docs/source-code-guide.md) | 教科书式源码阅读指南（15 章） |
+| [用户手册](docs/user-manual.md) | 完整最终用户操作手册 |
+| [项目总体规划](docs/master-plan.md) | 项目计划 SSOT、架构决策 |
 | [版本路线图](docs/roadmap.md) | 版本规划（v0.1 至 v0.4） |
-| [安全模型](docs/security.md) | 会话、CSRF、设备接入、Agent 认证、加密 |
-| [竞品调研](docs/research.md) | MeshCentral、Tactical RMM、Fleet、Zabbix 等竞品分析 |
-| [文件分发设计](docs/features/file-distribution/design.md) | v0.3 文件下发功能设计文档 |
+| [安全模型](docs/security.md) | 安全模型概述 |
+| [竞品调研](docs/research.md) | 竞品分析 |
+| [文件分发设计](docs/features/file-distribution/design.md) | v0.3 设计规范 |
 
 ---
 
@@ -466,7 +495,7 @@ sudo systemctl start labops-server
 .\scripts\deploy.ps1 -Mode native -InstallDeps
 ```
 
-完整的生产部署说明（包括 TLS 配置、Agent 安装、备份配置、故障排查），请参阅 **[部署指南](docs/deployment-guide.md)**。
+完整的生产部署说明（包括 TLS 配置、Agent 安装、备份配置、故障排查），请参阅 **[服务器部署教程](docs/deployment/server-deployment.md)**。
 
 ---
 
