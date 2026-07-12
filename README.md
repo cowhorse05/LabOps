@@ -1,6 +1,6 @@
 # LabOps
 
-**Lightweight Open-Source Operations Platform for Labs & Homelabs**
+**轻量级开源运维平台 | Lightweight Open-Source Operations Platform**
 
 [![CI](https://github.com/cowhorse05/LabOps/actions/workflows/ci.yml/badge.svg)](https://github.com/cowhorse05/LabOps/actions/workflows/ci.yml)
 [![Go Version](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go)](https://go.dev/)
@@ -10,34 +10,59 @@
 
 ---
 
-[**中文文档**](#中文文档-chinese-documentation) | [**English Documentation**](#overview)
+[**English**](#overview) | [**中文文档**](README_CN.md)
+
+**Live Demo:** [https://cowhorse.xyz](https://cowhorse.xyz) (password-protected)
 
 ---
 
 ## Overview
 
-LabOps is a lightweight, open-source operations console built for students, classroom labs, homelab enthusiasts, and small IT teams. It provides a real agent-server-web loop — agents report inventory and heartbeat data, receive commands, return results, and leave a full audit trail — all from a single Docker Compose command on one machine.
+LabOps is a lightweight, open-source operations console built for students, classroom labs, homelab enthusiasts, and small IT teams. It provides a **real Agent-Server-Web control loop** — agents report inventory and heartbeat data, receive commands, return execution results, and leave a full audit trail — all deployable from a single `docker compose up` command.
 
-> LabOps is not trying to replace mature RMM or monitoring platforms. It is a readable, runnable full-stack project that demonstrates a real operations control loop with minimal dependencies. No mock data, no external database — just SQLite, Go, and React.
+> LabOps is not trying to replace mature RMM or monitoring platforms. It is a readable, runnable full-stack project that demonstrates a real operations control loop with minimal dependencies. No mock data — every device in the dashboard is connected via a real WebSocket.
 
 ---
 
 ## Features
 
-- **Real Agent/Server/Web loop** — agents register, heartbeat, execute commands, and report results; no mock data
-- **Dashboard** — real-time device stats, online rates, and recent task/audit summaries with 10-second auto-refresh
-- **Device management** — searchable device list with detail view, live metrics (CPU/memory/disk), and heartbeat tracking
-- **Command execution** — run commands on any device and capture stdout, stderr, exit code, and duration
-- **Group-based batch dispatch** — send commands to every device in a group with a single click
-- **AI Ops** — intelligent health scoring (0-100) with threshold-based alerts for CPU, memory, disk, and offline events
+### Core Loop
+- **Real Agent/Server/Web loop** — agents register, heartbeat (every 10s), execute commands, and report results; zero mock data
+- **WebSocket real-time communication** — persistent bidirectional channel between server and every agent
 - **Full audit trail** — every registration, connection, command dispatch, and result is recorded and searchable
-- **Secure Docker Compose deployment** — Nginx HTTPS, internal MySQL/Server network, revocable sessions, and per-device credentials
-- **Agent token auth** — bcrypt-hashed passwords, Bearer token authentication, and rate limiting on login
-- **SQLite database** — zero configuration, single file, no external database required
-- **57 Go test functions** — 50 server + 7 agent, all passing, with 72.3% core coverage
-- **WebSocket real-time communication** — persistent bidirectional channel between server and agents
-- **Modern React UI** — Ant Design 5 + TypeScript + Zustand + Vite
-- **GitHub Actions CI** — Go vet, test, and TypeScript check/build on every push
+
+### Device Management
+- **Device inventory** — searchable device list with OS, IP, hostname, CPU/memory/disk specs
+- **Live metrics** — real-time CPU %, memory %, disk % with auto-refreshing progress bars
+- **Heartbeat tracking** — automatic online/offline detection (35s timeout, configurable)
+- **Group management** — organize devices into logical groups with online rate statistics
+
+### Task System
+- **Command execution** — run commands on any device, capture stdout/stderr/exit code/duration
+- **Batch dispatch** — send commands to every online device in a group with one click
+- **Command templates** — predefined, parameterized commands with argument validation (enum, regex, range)
+- **Task lifecycle** — pending → running → success/failed/timeout with full timing data
+
+### AI Ops
+- **Health scoring** — rule-based 0-100 score per device (CPU/memory/disk thresholds, offline detection)
+- **LLM-powered analysis** — optional AI analysis via OpenAI-compatible or Anthropic APIs
+- **Auto-remediation** — automatically execute safe (read-only) recommendations from the LLM
+- **Manual recommendations** — review and execute AI-suggested commands with one click
+
+### Security
+- **Session cookie authentication** — HttpOnly, Secure, SameSite=Strict cookies with CSRF protection
+- **Per-device credentials** — one-time enrollment codes exchanged for unique 256-bit device secrets
+- **RBAC** — three roles (admin, operator, viewer) with granular permissions
+- **bcrypt passwords** — cost factor 12, minimum 12 characters, forced change on first login
+- **Rate limiting** — per-IP token bucket (60/s general, 5/3min login, 10/min enrollment)
+- **AES-256-GCM encryption** — LLM API keys encrypted at rest
+
+### Deployment
+- **Single-command deploy** — `docker compose up -d`
+- **Auto TLS** — built-in Let's Encrypt integration via Nginx
+- **Dual database** — SQLite (zero-config) or MySQL 8.0+ (production)
+- **Systemd integration** — hardened service units for agents with security restrictions
+- **Automated backups** — daily MySQL dumps with 7-day daily + 4-week retention
 
 ---
 
@@ -48,161 +73,58 @@ LabOps is a lightweight, open-source operations console built for students, clas
 | Platform | Requirements |
 |----------|-------------|
 | **Windows** | PowerShell 5+, Docker Desktop or Podman |
-| **Linux** | bash, Docker Engine or Podman |
-| **Both** | Node.js 20+ (for local dev), Go 1.23+ (optional — builds run inside Docker) |
+| **Linux** | bash, Docker Engine 24+ or Podman |
+| **Both** | Node.js 20+ (for local dev), Go 1.24+ (optional — builds run inside Docker) |
 
 ### 3-Step Getting Started
 
 **Windows (PowerShell):**
 
 ```powershell
-# 1. Clone the repository
 git clone https://github.com/cowhorse05/LabOps.git
 cd LabOps
-
-# 2. Launch the full demo stack
-.\scripts\dev.ps1        # Docker Desktop
-# or for Podman:
-# .\scripts\dev.ps1      # (auto-detected if podman-compose is installed)
-
-# 3. Open your browser → http://localhost:5173
+.\scripts\dev.ps1
+# Open http://localhost:5173
 ```
 
 **Linux / macOS (bash):**
 
 ```bash
-# 1. Clone the repository
 git clone https://github.com/cowhorse05/LabOps.git
 cd LabOps
-
-# 2. Launch the full demo stack
-./scripts/dev.sh         # auto-detects docker or podman
-
-# 3. Open your browser → http://localhost:5173
+bash scripts/dev.sh
+# Open http://localhost:5173
 ```
 
-The first build takes 2-3 minutes as container images are pulled and built. Once ready, the compose environment starts the server, web console, and 4 simulated agents.
+The first build takes 2-3 minutes. The dev compose launches the server, web console, and **4 simulated agents** with mock metrics (Ubuntu, Windows, Server, Edge profiles).
 
 ### Stop the Stack
 
-**Windows:** `.\scripts\compose-down.ps1`
-**Linux:** `./scripts/compose-down.sh`
+```powershell
+# Windows
+.\scripts\compose-down.ps1
 
-### First administrator
+# Linux
+bash scripts/compose-down.sh
+```
 
-LabOps has no default password. Local development bootstraps `admin` with the development-only password configured in `compose.dev.yaml` and forces an immediate password change. Production requires `LABOPS_BOOTSTRAP_ADMIN_PASSWORD` in the untracked `.env` file and rejects the legacy `admin/admin` account.
+### First Administrator
 
-### Run Verification Checks
+LabOps has **no default password**. Local development bootstraps `admin` with the password configured in `compose.dev.yaml` and forces an immediate password change. Production requires `LABOPS_BOOTSTRAP_ADMIN_PASSWORD` in the untracked `.env` file.
+
+### Run Tests
 
 ```powershell
-.\scripts\test.ps1
+.\scripts\test.ps1   # TypeScript typecheck + Go vet/test + compose validation
 ```
 
 ---
 
-## Production Deployment
+## Live Demo
 
-### Container Compose (Ubuntu production)
+A production instance is running at **[https://cowhorse.xyz](https://cowhorse.xyz)** with real agents connected.
 
-The same `compose.yaml` used for development works for production — just customize your tokens in `.env` first:
-
-```bash
-# Copy and edit environment variables
-cp .env.example .env
-# Replace every CHANGE_ME value, obtain the TLS certificate, then deploy
-docker compose config --quiet
-docker compose build
-docker compose up -d
-```
-
-See [`deploy/README.md`](deploy/README.md) for the IP-certificate, backup, rollback, and host-Agent procedure.
-
-### Option 2: Native Deployment (Linux)
-
-For bare-metal Linux servers without Docker:
-
-```bash
-# Auto-install dependencies and deploy with systemd
-sudo ./scripts/deploy.sh --mode native --install-deps
-
-# Start services
-sudo systemctl start labops-server
-sudo systemctl start labops-agent@my-workstation
-
-# Web UI: http://YOUR-SERVER:8080
-# Serve the React frontend with nginx or Caddy pointing to web/dist/
-```
-
-What this does:
-1. Installs Go and Node.js via your package manager
-2. Compiles the server and agent into static binaries (`CGO_ENABLED=0`)
-3. Builds the React frontend into `web/dist/`
-4. Creates a `labops` system user, data directory at `/var/lib/labops`
-5. Installs systemd unit files for the server and agent template
-
-**Customization:**
-
-| File | Purpose |
-|------|---------|
-| `/etc/labops/env` | Server environment variables (tokens, DB path) |
-| `/etc/systemd/system/labops-server.service` | Server systemd unit |
-| `/etc/systemd/system/labops-agent@.service` | Agent template unit |
-
-### Option 3: Native Deployment (Windows)
-
-```powershell
-# Build binaries + web frontend
-.\scripts\deploy.ps1 -Mode native -InstallDeps
-
-# Run directly
-& "$env:ProgramFiles\LabOps\labops-server.exe"
-& "$env:ProgramFiles\LabOps\labops-agent.exe" --server=http://localhost:8080 --token=<token> --id=my-pc --name=my-pc
-```
-
-For production Windows services, install [NSSM](https://nssm.cc/) and wrap the server/agent executables.
-
-### Database Configuration
-
-LabOps supports **SQLite** (default) and **MySQL 8.0+** databases.
-
-#### SQLite (Default)
-
-No configuration required. The database file is created automatically at the path specified by `LABOPS_DB_PATH`.
-
-#### MySQL
-
-To use MySQL instead of SQLite, set these environment variables before starting the server:
-
-```env
-LABOPS_DB_DRIVER=mysql
-LABOPS_MYSQL_DSN=root:password@tcp(127.0.0.1:3306)/labops?parseTime=true&charset=utf8mb4
-```
-
-**Prerequisites:**
-- MySQL 8.0+ must be installed and running
-- The target database will be created automatically on first startup (requires `CREATE DATABASE` privilege)
-- The user specified in the DSN needs `CREATE TABLE`, `INSERT`, `UPDATE`, `DELETE`, `SELECT` privileges
-
-**Non-standard port example (Windows MySQL on port 3307):**
-
-```env
-LABOPS_MYSQL_DSN=root:123456@tcp(127.0.0.1:3307)/labops?parseTime=true&charset=utf8mb4
-```
-
-### Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `LABOPS_ADDR` | `:8080` | Server listen address |
-| `LABOPS_DB_DRIVER` | `sqlite` | Database driver: `sqlite` or `mysql` |
-| `LABOPS_DB_PATH` | `data/labops.db` | SQLite database file path |
-| `LABOPS_MYSQL_DSN` | `labops:labops@tcp(127.0.0.1:3306)/labops?...` | MySQL Data Source Name |
-| `LABOPS_BOOTSTRAP_ADMIN_PASSWORD` | none | Required only for an empty DB or legacy password replacement |
-| `LABOPS_ENCRYPTION_KEY` | none | Base64-encoded 32-byte key used for encrypted secrets |
-| `LABOPS_PUBLIC_ORIGIN` | none in production | Exact HTTPS origin allowed for Web sessions |
-| `LABOPS_HEARTBEAT_TIMEOUT` | `35s` | Mark device offline after this duration |
-| `LABOPS_TASK_TIMEOUT` | `2m` | Timeout running tasks |
-| `VITE_PROXY_TARGET` | `http://localhost:8080` | Vite dev server API proxy target |
+> This is a password-protected demo. It demonstrates the full Agent-Server-Web loop on a live Ubuntu server with Docker Compose, MySQL, Let's Encrypt TLS, and systemd-managed agents.
 
 ---
 
@@ -210,14 +132,11 @@ LABOPS_MYSQL_DSN=root:123456@tcp(127.0.0.1:3307)/labops?parseTime=true&charset=u
 
 ```mermaid
 flowchart LR
-    Web["React Web Console<br/>:5173"] -->|REST /api| Server["Go Server<br/>:8080"]
-    Agent1["Agent<br/>lab-pc-01 (Windows)"] -->|WebSocket| Server
-    Agent2["Agent<br/>lab-pc-02 (Ubuntu)"] -->|WebSocket| Server
-    Agent3["Agent<br/>lab-server-01 (Server)"] -->|WebSocket| Server
-    Agent4["Agent<br/>edge-node-01 (Edge)"] -->|WebSocket| Server
-    Server --> DB[("SQLite / MySQL")]
-    Server -->|command task| Agent1
-    Agent1 -->|stdout / stderr / exit code| Server
+    Web["React Web Console<br/>Nginx :443"] -->|REST /api| Server["Go Server<br/>:8080"]
+    Agent1["Agent<br/>lab-pc-01 (Windows)"] -->|WebSocket WSS| Server
+    Agent2["Agent<br/>lab-pc-02 (Ubuntu)"] -->|WebSocket WSS| Server
+    Server --> DB[("MySQL 8.0<br/>internal network")]
+    Server -->|outbound| LLM["LLM APIs<br/>(optional)"]
 ```
 
 ### Data Flow
@@ -228,8 +147,7 @@ flowchart LR
    │  register            │  UpsertDevice          │  GET /api/devices
    │  heartbeat (10s)     │  UpdateHeartbeat       │  POST /api/tasks
    │  task_result         │  CompleteTask          │  GET /api/aiops/report
-   │                      │  CreateAudit           │
-                          │
+                          │  CreateAudit
                           ▼
                    SQLite / MySQL
 ```
@@ -238,39 +156,14 @@ flowchart LR
 
 All messages use the JSON envelope format: `{"type": "<type>", "payload": {...}}`.
 
-| Direction | Type | Description | Frequency |
-|-----------|------|-------------|-----------|
-| Agent to Server | `register` | Device registration with full profile | On connect |
-| Agent to Server | `heartbeat` | Heartbeat + live metrics (CPU/mem/disk) | Every 10s |
-| Agent to Server | `task_result` | Command stdout, stderr, exit code, duration | On completion |
-| Server to Agent | `registered` | Registration confirmation with device ID | After register |
-| Server to Agent | `command` | Command dispatch with task ID | On task creation |
-| Server to Agent | `error` | Error notification | On failure |
-
----
-
-## API Overview
-
-Base URL: `http://localhost:8080/api`
-
-| Method | Path | Auth | Description |
-|--------|------|:----:|-------------|
-| `GET` | `/health` | - | Health check |
-| `POST` | `/auth/login` | - | Login, returns JWT + user |
-| `GET` | `/auth/me` | Bearer | Current authenticated user |
-| `GET` | `/stats` | Bearer | Device statistics (total, online, offline) |
-| `GET` | `/devices` | Bearer | List all registered devices |
-| `GET` | `/devices/{id}` | Bearer | Get device detail with live metrics |
-| `GET` | `/devices/{id}/tasks` | Bearer | List tasks for a specific device |
-| `GET` | `/groups` | Bearer | List groups with online/total counts |
-| `GET` | `/tasks` | Bearer | List tasks with results (limit 200) |
-| `POST` | `/tasks` | Bearer | Create task: `{deviceId?, groupName?, command}` |
-| `GET` | `/tasks/{id}` | Bearer | Get task detail with result |
-| `GET` | `/audit-logs` | Bearer | List audit log entries (limit 200) |
-| `GET` | `/aiops/report` | Bearer | AI Ops health analysis report |
-| `GET` | `/agent/ws?token=...` | Query | WebSocket upgrade for agents |
-
-**Authentication:** Web API requests use the `Authorization: Bearer <token>` header. Agent WebSocket connections pass the token as a query parameter.
+| Direction | Type | Payload | Frequency |
+|-----------|------|---------|-----------|
+| Agent → Server | `register` | Device profile (hostname, OS, CPU, memory, disk) | On connect |
+| Agent → Server | `heartbeat` | Live metrics (CPU%, memory%, disk%) | Every 10s |
+| Agent → Server | `task_result` | stdout, stderr, exit code, duration (ms) | On completion |
+| Server → Agent | `registered` | Confirmation | After register |
+| Server → Agent | `command` | Task ID, command string/executable, timeout | On dispatch |
+| Server → Agent | `error` | Error message | On failure |
 
 ---
 
@@ -278,13 +171,146 @@ Base URL: `http://localhost:8080/api`
 
 | Layer | Technology | Version |
 |-------|-----------|---------|
-| Frontend | React + TypeScript + Vite | 18 / 5.x / 6.x |
-| UI Library | Ant Design | 5.x |
-| State | Zustand | 5.x |
-| Backend | Go stdlib `net/http` | 1.25 |
-| WebSocket | gorilla/websocket | v1.5.3 |
-| Database | SQLite (modernc — pure Go) | - |
-| Agent | Go + gorilla/websocket | 1.23 |
+| **Frontend** | React + TypeScript + Vite | 18 / 5.6 / 5.4 |
+| **UI Library** | Ant Design (zhCN locale) | 5.21 |
+| **State** | Zustand | 4.5 |
+| **HTTP Client** | Axios | 1.7 |
+| **Routing** | react-router-dom | 6.27 |
+| **Backend** | Go stdlib `net/http` (Go 1.22+ patterns) | 1.25 |
+| **WebSocket** | gorilla/websocket | v1.5.3 |
+| **Auth** | Session cookies + bcrypt (+ CSRF) | — |
+| **Database** | SQLite (modernc.org/sqlite) / MySQL 8.0 | — |
+| **Agent** | Go + gorilla/websocket + gopsutil v4 | 1.24 |
+| **Reverse Proxy** | Nginx (TLS termination + static serving) | 1.27 |
+| **Container** | Docker Compose (3 services) | — |
+
+---
+
+## API Reference
+
+Base URL: `https://<host>/api`
+
+### Authentication
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| `POST` | `/auth/login` | — | Login, sets session cookies |
+| `POST` | `/auth/logout` | Session | Logout, clears session |
+| `POST` | `/auth/change-password` | Session | Change own password |
+| `GET` | `/auth/me` | Session | Current authenticated user |
+
+### Device Management
+
+| Method | Path | Auth | Permission | Description |
+|--------|------|:----:|:----------:|-------------|
+| `GET` | `/stats` | Session | `system:read` | Device statistics (total/online/offline) |
+| `GET` | `/devices` | Session | `system:read` | List all devices |
+| `GET` | `/devices/{id}` | Session | `system:read` | Device detail + live metrics |
+| `GET` | `/devices/{id}/tasks` | Session | `system:read` | Tasks for a device |
+| `POST` | `/devices` | Session | `system:device-revoke` | Create device manually |
+| `DELETE` | `/devices/{id}` | Session | `system:device-revoke` | Delete device |
+| `POST` | `/devices/{id}/revoke` | Session | `system:device-revoke` | Revoke device credential |
+| `GET` | `/groups` | Session | `system:read` | Groups with online counts |
+
+### Enrollment
+
+| Method | Path | Auth | Permission | Description |
+|--------|------|:----:|:----------:|-------------|
+| `GET` | `/enrollment-codes` | Session | `system:enrollment` | List enrollment codes |
+| `POST` | `/enrollment-codes` | Session | `system:enrollment` | Create enrollment code |
+| `DELETE` | `/enrollment-codes/{id}` | Session | `system:enrollment` | Revoke enrollment code |
+| `POST` | `/agent/enroll` | — | — | Agent enrollment (one-time code) |
+
+### Tasks
+
+| Method | Path | Auth | Permission | Description |
+|--------|------|:----:|:----------:|-------------|
+| `GET` | `/tasks` | Session | `system:read` | List tasks (limit 200) |
+| `POST` | `/tasks` | Session | Varies¹ | Create/dispatch task |
+| `GET` | `/tasks/{id}` | Session | `system:read` | Task detail + result |
+
+¹ Ad-hoc commands require `commands:adhoc`; template execution requires `templates:execute`.
+
+### Command Templates
+
+| Method | Path | Auth | Permission | Description |
+|--------|------|:----:|:----------:|-------------|
+| `GET` | `/command-templates` | Session | `system:read` | List templates |
+| `POST` | `/command-templates` | Session | `templates:manage` | Create template |
+| `PUT` | `/command-templates/{id}` | Session | `templates:manage` | Update template |
+
+### AI Ops
+
+| Method | Path | Auth | Permission | Description |
+|--------|------|:----:|:----------:|-------------|
+| `GET` | `/aiops/report` | Session | `system:read` | Health analysis report |
+| `GET` | `/aiops/llm-config` | Session | `aiops:llm` | Get LLM configuration |
+| `PUT` | `/aiops/llm-config` | Session | `aiops:llm` | Save LLM configuration |
+| `POST` | `/aiops/llm-test` | Session | `aiops:llm` | Test LLM connectivity |
+| `POST` | `/aiops/recommendations/execute` | Session | `aiops:llm` | Execute LLM recommendation |
+| `GET` | `/aiops/auto-mode` | Session | `aiops:llm` | Get auto-execute mode |
+| `PUT` | `/aiops/auto-mode` | Session | `aiops:llm` | Set auto-execute mode |
+
+### User Management
+
+| Method | Path | Auth | Permission | Description |
+|--------|------|:----:|:----------:|-------------|
+| `GET` | `/users` | Session | `system:users` | List users |
+| `POST` | `/users` | Session | `system:users` | Create user |
+| `PUT` | `/users/{id}` | Session | `system:users` | Update user role/status |
+
+### System
+
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| `GET` | `/health` | — | Health check |
+| `GET` | `/audit-logs` | Session | Audit log entries (limit 200) |
+| `GET` | `/agent/ws` | Agent | WebSocket upgrade for agents |
+
+---
+
+## Environment Variables
+
+### Server
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LABOPS_ADDR` | `:8080` | Server listen address |
+| `LABOPS_DB_DRIVER` | `mysql` | Database driver: `sqlite` or `mysql` |
+| `LABOPS_DB_PATH` | `data/labops.db` | SQLite database file path |
+| `LABOPS_MYSQL_DSN` | — | MySQL Data Source Name |
+| `LABOPS_ENV` | `development` | Environment: `development` or `production` |
+| `LABOPS_PUBLIC_ORIGIN` | `http://localhost:5173` | Exact origin for CORS and session binding |
+| `LABOPS_BOOTSTRAP_ADMIN_PASSWORD` | — | Initial admin password (empty DB only) |
+| `LABOPS_ENCRYPTION_KEY` | — | Base64 32-byte key for AES-256-GCM secret encryption |
+| `LABOPS_HEARTBEAT_TIMEOUT` | `35s` | Mark device offline after this duration |
+| `LABOPS_TASK_TIMEOUT` | `5m` | Task execution timeout |
+| `LABOPS_LLM_URL` | — | LLM API base URL |
+| `LABOPS_LLM_API_KEY` | — | LLM API key |
+
+### Agent
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LABOPS_SERVER_URL` | `http://localhost:8080` | Server URL |
+| `LABOPS_AGENT_TOKEN` | — | Legacy shared token (deprecated) |
+| `LABOPS_DEVICE_SECRET` | — | Per-device secret (from enrollment) |
+| `LABOPS_ENROLLMENT_CODE` | — | One-time enrollment code |
+| `LABOPS_AGENT_CREDENTIALS` | Platform-specific | Credentials file path |
+| `LABOPS_AGENT_NAME` | OS hostname | Device display name |
+| `LABOPS_AGENT_GROUP` | `default` | Device group |
+| `LABOPS_AGENT_ID` | `agent-<name>` | Stable agent ID |
+| `LABOPS_MOCK_PROFILE` | `ubuntu` | Mock profile: ubuntu, windows-lab, server, edge-node |
+| `LABOPS_AGENT_REAL` | `false` | Use real system metrics |
+
+### Docker Compose
+
+| Variable | Required | Description |
+|----------|:--------:|-------------|
+| `SERVER_HOST` | Yes | Public IP or domain |
+| `LABOPS_VERSION` | No | Image tag (default: `dev`) |
+| `MYSQL_ROOT_PASSWORD` | Yes | MySQL root password |
+| `MYSQL_PASSWORD` | Yes | MySQL application password |
 
 ---
 
@@ -292,237 +318,224 @@ Base URL: `http://localhost:8080/api`
 
 ```text
 LabOps/
-├── web/                         # React frontend
-│   └── src/
-│       ├── api/                 # Axios client + API functions
-│       ├── components/          # Shared components (ErrorBoundary)
-│       ├── hooks/               # Custom hooks (useLoadable, useLoadableAll)
-│       ├── layouts/             # AppLayout (sidebar + header + content)
-│       ├── pages/               # 8 pages
-│       │   ├── LoginPage        #   Authentication
-│       │   ├── DashboardPage    #   Overview with stats & charts
-│       │   ├── DevicesPage      #   Device list with search
-│       │   ├── DeviceDetailPage #   Device info + command execution
-│       │   ├── GroupsPage       #   Group management
-│       │   ├── TasksPage        #   Batch commands + task history
-│       │   ├── AuditPage        #   Audit log browser
-│       │   └── AiOpsPage        #   AI Ops health analysis
-│       ├── stores/              # Zustand stores (auth)
-│       ├── styles/              # Global CSS
-│       ├── utils/               # Status helpers (statusColor, statusText)
-│       └── types.ts             # TypeScript type definitions
-├── server/                      # Go backend
-│   └── internal/core/
-│       ├── types.go             # Domain types + constants + wire protocol
-│       ├── store.go             # SQLite CRUD (6 tables)
-│       ├── app.go               # HTTP routes + middleware + maintenance loop
-│       ├── api.go               # REST handlers (14 endpoints)
-│       ├── agent.go             # WebSocket handler
-│       ├── analyzer.go          # AI Ops analysis engine
-│       ├── store_test.go        # Storage layer tests
-│       ├── api_test.go          # HTTP handler tests
-│       ├── agent_test.go        # WebSocket integration tests
-│       └── analyzer_test.go     # Analyzer tests
-├── agent/                       # Go agent
-│   └── cmd/agent/
-│       ├── main.go              # Agent main logic (connect, heartbeat, execute)
-│       └── main_test.go         # Agent tests
-├── docs/                        # Documentation
-│   ├── master-plan.md           # Project plan SSOT
-│   ├── user-manual.md           # End-user guide
-│   ├── product-plan.md          # Product positioning
-│   ├── research.md              # Competitive research
-│   ├── roadmap.md               # Version roadmap
-│   ├── dev-log.md               # Development log
-│   ├── log.md                   # Changelog
-│   ├── report.md                # Project report
+├── web/                            # React frontend (12 pages)
+│   ├── src/
+│   │   ├── api/                    # Axios client + typed API functions
+│   │   ├── components/             # ErrorBoundary, ChangePasswordModal
+│   │   ├── hooks/                  # useLoadable, useLoadableAll
+│   │   ├── layouts/                # AppLayout (sidebar + header + content)
+│   │   ├── pages/                  # 12 page components
+│   │   │   ├── LoginPage           #   Authentication + forced password change
+│   │   │   ├── DashboardPage       #   Stats, device overview, recent activity
+│   │   │   ├── DevicesPage         #   Searchable device list + management
+│   │   │   ├── DeviceDetailPage    #   Live metrics + ad-hoc command execution
+│   │   │   ├── GroupsPage          #   Group statistics
+│   │   │   ├── TasksPage           #   Batch commands + task history
+│   │   │   ├── AuditPage           #   Audit log browser
+│   │   │   ├── AiOpsPage           #   AI health analysis + recommendations
+│   │   │   ├── AiOpsSettingsPage   #   LLM provider configuration
+│   │   │   ├── EnrollmentPage      #   Enrollment code management
+│   │   │   ├── TemplatesPage       #   Command template CRUD
+│   │   │   └── UsersPage           #   User management
+│   │   ├── stores/                 # Zustand auth store
+│   │   ├── styles/                 # Global CSS
+│   │   ├── utils/                  # Status helpers, permission utilities
+│   │   └── types.ts                # TypeScript type definitions
+│   ├── nginx/                      # Nginx config template (TLS, proxy, SPA)
+│   ├── Dockerfile                  # Production build (Node build → Nginx serve)
+│   └── Dockerfile.dev              # Development build (Vite dev server)
+├── server/                         # Go backend
+│   ├── cmd/server/main.go          # Entry point + env parsing + graceful shutdown
+│   ├── internal/core/
+│   │   ├── app.go                  # HTTP routes, middleware chain, maintenance loop
+│   │   ├── api.go                  # REST handlers (34 endpoints)
+│   │   ├── agent.go                # WebSocket hub, agent lifecycle, task dispatch
+│   │   ├── store.go                # Database CRUD (SQLite + MySQL dual dialect)
+│   │   ├── types.go                # Domain types, constants, wire protocol
+│   │   ├── analyzer.go             # AI Ops rule engine + health scoring
+│   │   ├── llm.go                  # OpenAI/Anthropic LLM client
+│   │   ├── auth_context.go         # Session auth, CSRF, permission middleware
+│   │   ├── enrollment.go           # Device enrollment + credential management
+│   │   ├── encryption.go           # AES-256-GCM encryption utilities
+│   │   ├── templates.go            # Command template rendering + validation
+│   │   ├── security_store.go       # User/session/permission persistence
+│   │   ├── dialect.go              # Database dialect interface + schema definition
+│   │   ├── dialect_mysql.go        # MySQL dialect implementation
+│   │   ├── dialect_sqlite.go       # SQLite dialect implementation
+│   │   ├── migrations.go           # Versioned schema migrations
+│   │   ├── *_test.go               # 50+ test functions (72.3% core coverage)
+│   │   └── concurrent_test.go      # Race condition / concurrency tests
+│   └── Dockerfile                  # Multi-stage build (Go → Alpine, non-root)
+├── agent/                          # Go agent
+│   ├── cmd/agent/
+│   │   ├── main.go                 # Agent logic (connect, enroll, heartbeat, execute)
+│   │   └── main_test.go            # Agent tests (7 functions)
+│   └── Dockerfile                  # Multi-stage build (Go → Alpine, non-root)
+├── deploy/                         # Deployment resources
+│   ├── README.md                   # Production deployment guide (Ubuntu)
+│   ├── systemd/
+│   │   ├── labops-agent.service    # Hardened agent systemd unit
+│   │   ├── labops-backup.service   # Database backup oneshot unit
+│   │   └── labops-backup.timer     # Daily backup timer (03:15 UTC)
+│   └── acme-webroot/               # Certbot ACME challenge webroot
+├── scripts/                        # Utility scripts
+│   ├── dev.sh / dev.ps1            # Development compose launch
+│   ├── compose-down.sh / .ps1      # Development compose teardown
+│   ├── deploy.sh / deploy.ps1      # Production deployment (native/compose)
+│   ├── install-agent.sh            # Linux agent installer
+│   ├── uninstall-agent.sh          # Linux agent uninstaller
+│   ├── backup.sh / restore.sh      # Database backup & restore
+│   ├── test.ps1                    # CI-like verification script
+│   └── screenshots.py              # Playwright screenshot capture
+├── docs/                           # Documentation
+│   ├── architecture.md             # System architecture & internal logic
+│   ├── deployment-guide.md         # Step-by-step deployment tutorial
+│   ├── source-code-guide.md        # Source code reading guide (textbook-style)
+│   ├── master-plan.md              # Project plan SSOT
+│   ├── user-manual.md              # End-user guide (Chinese)
+│   ├── product-plan.md             # Product positioning + MVP scope
+│   ├── research.md                 # Competitive analysis
+│   ├── roadmap.md                  # Version roadmap (v0.1 → v0.4)
+│   ├── security.md                 # Security model overview
+│   ├── secure-api.md               # API permission matrix
+│   ├── dev-log.md                  # Phase-by-phase development log
+│   ├── log.md                      # Detailed changelog
+│   ├── report.md                   # Project summary report
 │   └── features/
-│       └── file-distribution/   # v0.3 file distribution design spec
-├── scripts/                     # PowerShell development scripts
-│   ├── dev.ps1                  # Full stack launch
-│   ├── test.ps1                 # Build checks + Go tests
-│   └── compose-down.ps1         # Teardown
-├── compose.yaml                 # Production Compose (Nginx web + server + MySQL)
-└── README.md
+│       └── file-distribution/      # v0.3 file distribution design spec
+├── data/                           # Test data & artifacts
+│   ├── browser-smoke/              # Playwright E2E screenshots
+│   └── browser-smoke.cjs           # Playwright smoke test script
+├── .github/workflows/ci.yml        # GitHub Actions CI pipeline
+├── compose.yaml                    # Production Docker Compose
+├── compose.dev.yaml                # Development Docker Compose
+├── .env.example                    # Environment variable template
+├── CHANGELOG.md                    # Release changelog
+├── CONTRIBUTING.md                 # Contribution guidelines
+├── SECURITY.md                     # Security policy + disclosure
+├── LICENSE                         # MIT License
+├── README.md                       # This file
+└── README_CN.md                    # Chinese README
 ```
 
 ---
 
 ## Documentation
 
-- [Master Plan](docs/master-plan.md) — Project roadmap, architecture decisions, and implementation status
-- [User Manual](docs/user-manual.md) — End-user guide covering all 8 pages and demo scenarios
-- [Changelog](docs/log.md) — Detailed change history by round
-- [Research](docs/research.md) — Competitive analysis of MeshCentral, Tactical RMM, Fleet, Zabbix/Netdata
-- [Roadmap](docs/roadmap.md) — Version roadmap and planned features
-- [File Distribution Spec](docs/features/file-distribution/design.md) — v0.3 design document for file push capabilities
+| Document | Description |
+|----------|-------------|
+| [Architecture Guide](docs/architecture.md) | System architecture, database schema, auth flow, task lifecycle, AI Ops pipeline |
+| [Deployment Guide](docs/deployment-guide.md) | Step-by-step production deployment tutorial (from zero to live) |
+| [Source Code Guide](docs/source-code-guide.md) | Textbook-style reading guide with chapter dependencies |
+| [User Manual](docs/user-manual.md) | End-user guide covering all pages and demo scenarios (Chinese) |
+| [Master Plan](docs/master-plan.md) | Project roadmap, architecture decisions, implementation status |
+| [Product Plan](docs/product-plan.md) | Audience, MVP scope, non-goals, demo scenario |
+| [Roadmap](docs/roadmap.md) | Version roadmap (v0.1 through v0.4) |
+| [Security](docs/security.md) | Security model: sessions, CSRF, enrollment, agent auth, encryption |
+| [Research](docs/research.md) | Competitive analysis of MeshCentral, Tactical RMM, Fleet, Zabbix, etc. |
+| [File Distribution Spec](docs/features/file-distribution/design.md) | v0.3 design document for file push capabilities |
 
 ---
 
-## 中文文档 (Chinese Documentation)
+## Production Deployment
 
-### 项目概述
-
-LabOps 是一个轻量级开源运维平台，面向课堂实验室、家庭实验室爱好者和中小型 IT 团队。它提供了完整的 **Agent → Server → Web Console** 运维闭环 —— Agent 实时注册、心跳上报、接收命令并返回执行结果，所有操作均记录完整的审计日志。
-
-> LabOps 不是要替代成熟的 RMM 或监控平台。它是一个可读、可运行的全栈项目，以最小依赖演示真实的运维控制循环。无模拟数据、无需外部数据库 —— 只需 SQLite（或 MySQL）、Go 和 React。
-
-### 核心功能
-
-- **真实 Agent/Server/Web 循环** — Agent 注册、心跳、执行命令、上报结果，无模拟数据
-- **仪表盘** — 实时设备统计、在线率、最近任务和审计摘要，每 10 秒自动刷新
-- **设备管理** — 可搜索的设备列表，详情视图包含 CPU/内存/磁盘实时指标和心跳追踪
-- **命令执行** — 在任意设备上运行命令，捕获 stdout、stderr、退出码和执行耗时
-- **分组批量下发** — 一键向组内所有设备发送命令
-- **AI Ops 智能分析** — 健康评分（0-100），CPU/内存/磁盘/离线事件的阈值告警
-- **完整审计日志** — 每次注册、连接、命令下发和结果均被记录，可追溯
-- **安全 Docker Compose 部署** — Nginx HTTPS、内部数据库网络、可撤销会话和每设备独立凭据
-- **JWT 会话认证** — bcrypt 密码哈希 + Bearer Token + 首次登录强制改密
-- **WebSocket 实时通信** — 服务端与 Agent 之间持久的双向通道
-- **双数据库支持** — SQLite（默认，零配置）和 MySQL 8.0+
-
-### 快速开始
-
-**Windows (PowerShell):**
-
-```powershell
-git clone https://github.com/cowhorse05/LabOps.git
-cd LabOps
-.\scripts\dev.ps1
-```
-
-浏览器打开 `http://localhost:5173`。项目不再提供通用默认密码；开发环境的首次管理员密码由 `compose.dev.yaml` 显式配置并强制修改，生产环境必须通过未提交的 `.env` 提供初始化密码。
-
-**Linux (bash):**
+### Docker Compose (Recommended)
 
 ```bash
 git clone https://github.com/cowhorse05/LabOps.git
 cd LabOps
-bash scripts/dev.sh
+cp .env.example .env
+# Edit .env — replace every CHANGE_ME value
+# See docs/deployment-guide.md for detailed instructions
+
+docker compose config --quiet   # Validate
+docker compose build            # Build images
+docker compose up -d            # Start services
 ```
 
-### 数据库配置
+### Native Linux (systemd)
 
-#### 使用 MySQL（本地开发）
+```bash
+sudo bash scripts/deploy.sh --mode native --install-deps
+sudo systemctl start labops-server
+```
 
-以 Windows 本地 MySQL 8.0（端口 3307）为例：
+### Native Windows
 
 ```powershell
-# 1. 创建数据库（首次需要）
-& "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe" -u root -P 3307 -p123456 -e "CREATE DATABASE IF NOT EXISTS labops CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-
-# 2. 设置环境变量并启动服务端
-$env:LABOPS_DB_DRIVER = "mysql"
-$env:LABOPS_MYSQL_DSN = "root:123456@tcp(127.0.0.1:3307)/labops?parseTime=true&charset=utf8mb4"
-$env:LABOPS_ADDR = ":8080"
-$env:LABOPS_BOOTSTRAP_ADMIN_PASSWORD = "change-this-development-password"
-$env:LABOPS_PUBLIC_ORIGIN = "http://localhost:5173"
-cd server
-go run ./cmd/server/
-
-# 3. 另开终端启动前端
-cd web
-npm install
-npm run dev
+.\scripts\deploy.ps1 -Mode native -InstallDeps
 ```
 
-浏览器打开 `http://localhost:5173` 即可登录。
+For complete production deployment instructions including TLS setup, agent installation, backup configuration, and troubleshooting, see the **[Deployment Guide](docs/deployment-guide.md)**.
 
-### 技术栈
+---
 
-| 层级 | 技术 | 版本 |
-|------|------|------|
-| 前端框架 | React + TypeScript + Vite | 18 / 5.6 / 5.4 |
-| UI 组件库 | Ant Design | 5.x |
-| 状态管理 | Zustand | 4.5 |
-| HTTP 客户端 | Axios | 1.7 |
-| 路由 | react-router-dom | 6.27 |
-| 后端 | Go stdlib `net/http` | 1.25 |
-| WebSocket | gorilla/websocket | v1.5.3 |
-| 认证 | JWT (golang-jwt v5) + bcrypt | - |
-| 数据库 | SQLite / MySQL 8.0 | - |
-| Agent | Go + gorilla/websocket | 1.23 |
+## Database Configuration
 
-### API 概览
+### SQLite (Zero Configuration)
 
-基础 URL: `http://localhost:8080/api`
+No setup required. Set `LABOPS_DB_DRIVER=sqlite` and the database file is created at `LABOPS_DB_PATH` (default: `data/labops.db`). Ideal for development and small deployments.
 
-| 方法 | 路径 | 认证 | 说明 |
-|------|------|:----:|------|
-| `GET` | `/health` | - | 健康检查 |
-| `POST` | `/auth/login` | - | 登录，返回 JWT 和用户信息 |
-| `POST` | `/auth/change-password` | Bearer | 修改密码 |
-| `GET` | `/auth/me` | Bearer | 当前登录用户信息 |
-| `GET` | `/stats` | Bearer | 设备统计（总数/在线/离线） |
-| `GET` | `/devices` | Bearer | 所有注册设备列表 |
-| `GET` | `/devices/{id}` | Bearer | 设备详情和实时指标 |
-| `GET` | `/devices/{id}/tasks` | Bearer | 设备关联任务列表 |
-| `GET` | `/groups` | Bearer | 设备分组列表 |
-| `GET` | `/tasks` | Bearer | 任务列表（最近 200 条） |
-| `POST` | `/tasks` | Bearer | 创建任务（单设备或按组） |
-| `GET` | `/tasks/{id}` | Bearer | 任务详情和执行结果 |
-| `GET` | `/audit-logs` | Bearer | 审计日志（最近 200 条） |
-| `GET` | `/aiops/report` | Bearer | AI Ops 健康分析报告 |
-| `GET` | `/agent/ws?token=...` | Query | Agent WebSocket 连接 |
+### MySQL 8.0+ (Production)
 
-### 环境变量
+Set these environment variables:
 
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `LABOPS_ADDR` | `:8080` | 服务器监听地址 |
-| `LABOPS_DB_DRIVER` | `sqlite` | 数据库驱动: `sqlite` 或 `mysql` |
-| `LABOPS_DB_PATH` | `data/labops.db` | SQLite 数据库文件路径 |
-| `LABOPS_MYSQL_DSN` | `labops:labops@tcp(127.0.0.1:3306)/labops?...` | MySQL 连接字符串 |
-| `LABOPS_BOOTSTRAP_ADMIN_PASSWORD` | 无 | 空数据库初始化管理员时使用 |
-| `LABOPS_ENCRYPTION_KEY` | 无 | Base64 编码的 32 字节敏感配置加密密钥 |
-| `LABOPS_PUBLIC_ORIGIN` | 生产环境必填 | Web 控制台精确 HTTPS Origin |
-| `LABOPS_HEARTBEAT_TIMEOUT` | `35s` | 心跳超时时间 |
-| `LABOPS_TASK_TIMEOUT` | `2m` | 任务执行超时时间 |
-| `VITE_PROXY_TARGET` | `http://localhost:8080` | Vite 开发服务器代理目标 |
-
-### 项目结构
-
-```text
-LabOps/
-├── web/                        # React 前端
-│   └── src/
-│       ├── api/                # Axios 客户端和 API 函数
-│       ├── components/         # 共享组件
-│       ├── hooks/              # 自定义 Hook
-│       ├── layouts/            # 布局组件
-│       ├── pages/              # 8 个页面组件
-│       ├── stores/             # Zustand 状态管理
-│       └── utils/              # 工具函数
-├── server/                     # Go 后端
-│   ├── cmd/server/main.go      # 入口点
-│   └── internal/core/
-│       ├── types.go            # 领域模型和协议定义
-│       ├── store.go            # 数据库 CRUD（SQLite + MySQL 双驱动）
-│       ├── app.go              # HTTP 路由、中间件、WebSocket Hub
-│       ├── api.go              # REST 处理器（14 个端点）
-│       ├── agent.go            # WebSocket Agent 处理器
-│       └── analyzer.go         # AI Ops 分析引擎
-├── agent/                      # Go Agent 程序
-│   └── cmd/agent/main.go       # Agent 入口点
-├── compose.yaml                # 生产 Compose（Nginx Web + Server + MySQL）
-├── scripts/                    # PowerShell 开发脚本
-├── docs/                       # 详细文档
-└── README.md
+```env
+LABOPS_DB_DRIVER=mysql
+LABOPS_MYSQL_DSN=user:password@tcp(host:3306)/labops?parseTime=true&charset=utf8mb4
 ```
+
+The target database is created automatically on first startup.
+
+---
+
+## Development
+
+### Local Development
+
+```bash
+# Start the full dev stack (MySQL, server, Vite dev server)
+bash scripts/dev.sh     # or .\scripts\dev.ps1 on Windows
+
+# Run all checks
+.\scripts\test.ps1      # TypeScript typecheck + tests + Go vet + Go test + compose validation
+```
+
+### Project Conventions
+
+- **Windows-first development** — PowerShell scripts for all tooling
+- **Go stdlib only** — no external web framework (no gin, echo, or chi)
+- **Database-agnostic** — dialect abstraction supports SQLite and MySQL
+- **No mock data in production** — the dev environment uses simulated agents with configurable profiles
 
 ---
 
 ## Contributing
 
-Contributions are welcome. Please open an issue to discuss proposed changes before submitting a pull request. The project follows a Windows-first development workflow with PowerShell scripts for all tooling.
+Contributions are welcome. Please open an issue to discuss proposed changes before submitting a pull request.
 
 Areas where contributions would be especially valuable:
 
 - Additional agent mock profiles
 - C++ agent implementation (planned for v0.4)
-- File distribution feature implementation (design spec ready)
+- File distribution feature implementation (design spec ready in `docs/features/file-distribution/`)
 - Dashboard data visualization improvements
 - Test coverage expansion
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+---
+
+## Security
+
+For vulnerability disclosure, see [SECURITY.md](SECURITY.md). The project uses:
+
+- bcrypt password hashing (cost 12) with minimum 12-character passwords
+- Session cookie authentication with CSRF double-submit protection
+- Per-device credentials via one-time enrollment codes
+- AES-256-GCM encryption for stored secrets
+- Rate limiting on authentication endpoints
+- Containerized deployment with internal networking
 
 ---
 
@@ -540,7 +553,3 @@ LabOps draws inspiration from several excellent open-source operations and monit
 - [Tactical RMM](https://github.com/amidaware/tacticalrmm) — task execution and audit trail design
 - [Fleet](https://github.com/fleetdm/fleet) — device inventory and grouping models
 - [Zabbix](https://github.com/zabbix/zabbix) and [Netdata](https://github.com/netdata/netdata) — monitoring and health scoring concepts
-
-double kill 
-
-hhh
