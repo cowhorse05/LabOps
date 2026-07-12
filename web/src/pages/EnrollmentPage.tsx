@@ -25,7 +25,10 @@ export default function EnrollmentPage() {
     ]} /></Card>
     <Modal open={Boolean(createdCode)} title="一次性注册码" onCancel={() => setCreatedCode('')} footer={<Button type="primary" onClick={() => setCreatedCode('')}>我已保存</Button>}>
       <Typography.Paragraph type="warning">关闭后无法再次查看，请通过安全渠道复制到目标主机。</Typography.Paragraph>
-      <Input.Password value={createdCode} readOnly visibilityToggle addonAfter={<Button type="link" onClick={() => { void navigator.clipboard.writeText(createdCode); message.success('已复制'); }}>复制</Button>} />
+      <Space.Compact block>
+        <Input.Password value={createdCode} readOnly visibilityToggle />
+        <Button onClick={() => { void navigator.clipboard.writeText(createdCode); message.success('已复制'); }}>复制</Button>
+      </Space.Compact>
       <Typography.Paragraph copyable style={{ marginTop: 16 }}><code>sudo labops-agent --server=https://${'{SERVER_HOST}'} --enroll-code={createdCode} --real</code></Typography.Paragraph>
     </Modal>
   </div>;

@@ -147,7 +147,7 @@ export default function DevicesPage() {
         onOk={handleCreate}
         onCancel={() => { setCreateModalVisible(false); createForm.resetFields(); }}
         confirmLoading={creating}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={createForm} layout="vertical">
           <Form.Item name="name" label="设备名称" rules={[{ required: true, message: '请输入设备名称' }]}>
