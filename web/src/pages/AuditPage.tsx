@@ -22,6 +22,7 @@ export default function AuditPage() {
       </div>
       <Card>
         <Table
+          scroll={{ x: 'max-content' }}
           rowKey="id"
           loading={loading}
           dataSource={logs ?? []}

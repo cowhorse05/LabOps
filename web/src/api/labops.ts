@@ -1,6 +1,17 @@
 import { api } from './client';
 import type { AiOpsLLMConfig, AuditLog, CommandTemplate, Device, DeviceGroup, DeviceStats, EnrollmentCode, LLMRecommendation, LLMTestResult, Task, User } from '@/types';
 
+export const setupApi = {
+  async status() {
+    const { data } = await api.get<{ setupRequired: boolean }>('/setup/status');
+    return data;
+  },
+  async createAdmin(input: { username: string; password: string; confirmPassword: string }) {
+    const { data } = await api.post<{ user: User; mustChangePassword: boolean }>('/setup/admin', input);
+    return data;
+  },
+};
+
 export const authApi = {
   async login(username: string, password: string) {
     const { data } = await api.post<{ user: User; mustChangePassword?: boolean }>('/auth/login', { username, password });

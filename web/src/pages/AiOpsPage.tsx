@@ -332,6 +332,7 @@ export default function AiOpsPage() {
             <Col xs={24} xl={10}>
               <Card title="分组概览">
                 <Table
+                  scroll={{ x: 'max-content' }}
                   rowKey="groupName"
                   size="small"
                   pagination={false}

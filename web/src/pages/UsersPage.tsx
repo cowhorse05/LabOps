@@ -17,7 +17,7 @@ export default function UsersPage() {
   };
   return <div className="page">
     <div className="page-head"><div><Typography.Title level={2}>用户与角色</Typography.Title><Typography.Text className="muted">固定角色：admin、operator、viewer。</Typography.Text></div><Button type="primary" onClick={() => setOpen(true)}>新建用户</Button></div>
-    <Card><Table rowKey="id" loading={loading} dataSource={data ?? []} columns={[
+    <Card><Table scroll={{ x: 'max-content' }} rowKey="id" loading={loading} dataSource={data ?? []} columns={[
       { title: '用户名', dataIndex: 'username' }, { title: '显示名', dataIndex: 'displayName' },
       { title: '角色', dataIndex: 'role', render: (v) => <Tag>{v}</Tag> },
       { title: '状态', dataIndex: 'status', render: (v) => <Tag color={v === 'active' ? 'green' : 'red'}>{v}</Tag> },

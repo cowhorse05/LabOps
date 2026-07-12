@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -711,6 +712,64 @@ func (a *App) handleSaveAutoMode(w http.ResponseWriter, r *http.Request) {
 	// Re-init to pick up the new setting
 	a.analyzer.TriggerRun()
 	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
+}
+
+// handleSetupStatus returns whether the system requires first-time setup.
+func (a *App) handleSetupStatus(w http.ResponseWriter, r *http.Request) {
+	count, err := a.store.CountUsers(r.Context())
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "SETUP_CHECK_FAILED", "unable to check setup status")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"setupRequired": count == 0})
+}
+
+// handleSetupAdmin creates the first admin user when the system is uninitialized.
+func (a *App) handleSetupAdmin(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Username        string `json:"username"`
+		Password        string `json:"password"`
+		ConfirmPassword string `json:"confirmPassword"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	req.Username = strings.TrimSpace(strings.ToLower(req.Username))
+	if !usernamePattern.MatchString(req.Username) {
+		writeAPIError(w, http.StatusBadRequest, "USERNAME_INVALID", "username must be 3-64 lowercase alphanumeric characters")
+		return
+	}
+	if len(req.Password) < 12 {
+		writeAPIError(w, http.StatusBadRequest, "PASSWORD_TOO_SHORT", "password must be at least 12 characters")
+		return
+	}
+	if req.Password != req.ConfirmPassword {
+		writeAPIError(w, http.StatusBadRequest, "PASSWORD_MISMATCH", "passwords do not match")
+		return
+	}
+
+	user, err := a.store.TryCreateInitialAdmin(r.Context(), req.Username, req.Username, req.Password)
+	if errors.Is(err, ErrAlreadyInitialized) {
+		writeAPIError(w, http.StatusConflict, "ALREADY_INITIALIZED", "system is already initialized")
+		return
+	}
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "SETUP_FAILED", err.Error())
+		return
+	}
+
+	// Auto-login: create a session and set cookies so the user is logged in
+	sessionToken, csrfToken, err := a.store.CreateWebSession(r.Context(), user.ID, clientIP(r), r.UserAgent())
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "SESSION_FAILED", "admin created but auto-login failed")
+		return
+	}
+	setAuthCookies(w, sessionToken, csrfToken, a.config.SecureCookies)
+
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"user":               user,
+		"mustChangePassword": true,
+	})
 }
 
 const maxBodySize = 1 << 20 // 1 MiB

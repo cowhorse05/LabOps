@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Avatar, Button, Dropdown, Layout, Menu, Space, Tag, Typography, App } from 'antd';
+import { Avatar, Button, Drawer, Dropdown, Layout, Menu, Space, Tag, Typography, App } from 'antd';
 import {
   AuditOutlined,
   ClusterOutlined,
@@ -9,6 +9,7 @@ import {
   DesktopOutlined,
   KeyOutlined,
   LogoutOutlined,
+  MenuOutlined,
   ProfileOutlined,
   ReloadOutlined,
   SafetyCertificateOutlined,
@@ -45,6 +46,15 @@ export default function AppLayout() {
     ...(hasPermission('users:manage') ? [{ key: '/users', icon: <TeamOutlined />, label: '用户' }] : []),
   ];
 
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 992);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 992);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   useEffect(() => {
     authApi
       .me()
@@ -64,29 +74,44 @@ export default function AppLayout() {
     { key: 'logout', icon: <LogoutOutlined />, label: '退出登录' },
   ];
 
+  const menuElement = (
+    <>
+      <div className="brand" onClick={() => { navigate('/dashboard'); setMobileMenuOpen(false); }} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') { navigate('/dashboard'); setMobileMenuOpen(false); } }}>
+        <div className="brand-mark">L</div>
+        <div>
+          <div className="brand-name">LabOps</div>
+          <div className="brand-sub">Open lab operations</div>
+        </div>
+      </div>
+      <Menu
+        mode="inline"
+        selectedKeys={[activeKey]}
+        items={navItems}
+        onClick={(item) => { navigate(item.key); setMobileMenuOpen(false); }}
+        className="shell-menu"
+      />
+    </>
+  );
+
   return (
     <Layout className="shell">
-      <Sider width={232} className="shell-sider">
-        <div className="brand" onClick={() => navigate('/dashboard')} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') navigate('/dashboard'); }}>
-          <div className="brand-mark">L</div>
-          <div>
-            <div className="brand-name">LabOps</div>
-            <div className="brand-sub">Open lab operations</div>
-          </div>
-        </div>
-        <Menu
-          mode="inline"
-          selectedKeys={[activeKey]}
-          items={navItems}
-          onClick={(item) => navigate(item.key)}
-          className="shell-menu"
-        />
-      </Sider>
+      {!isMobile && (
+        <Sider width={232} className="shell-sider">
+          {menuElement}
+        </Sider>
+      )}
       <Layout>
         <Header className="shell-header">
-          <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {isMobile && (
+              <Button
+                type="text"
+                icon={<MenuOutlined style={{ color: '#2563eb', fontSize: 20 }} />}
+                onClick={() => setMobileMenuOpen(true)}
+              />
+            )}
             <Typography.Text className="muted">当前环境</Typography.Text>
-            <Space size={8} style={{ marginLeft: 10 }}>
+            <Space size={8}>
               <Tag color="blue">Windows + Docker</Tag>
               <Tag color="green">MVP</Tag>
             </Space>
@@ -122,6 +147,17 @@ export default function AppLayout() {
           <Outlet />
         </Content>
       </Layout>
+      <Drawer
+        title={null}
+        placement="left"
+        closable={false}
+        onClose={() => setMobileMenuOpen(false)}
+        open={mobileMenuOpen}
+        width={232}
+        styles={{ body: { padding: 0, background: '#101827' } }}
+      >
+        {menuElement}
+      </Drawer>
       <ChangePasswordModal
         open={changePasswordOpen}
         onClose={() => setChangePasswordOpen(false)}

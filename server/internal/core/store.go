@@ -21,9 +21,94 @@ import (
 type Driver string
 
 const (
-	DriverSQLite Driver = "sqlite"
-	DriverMySQL  Driver = "mysql"
+	DriverSQLite  Driver = "sqlite"
+	DriverMySQL   Driver = "mysql"
+	DriverJSON    Driver = "jsonfile"
 )
+
+// DataStore is the persistence contract used by the application.
+// Both *Store (SQL-backed) and *JSONStore (file-backed) implement it.
+type DataStore interface {
+	// Users
+	CountUsers(ctx context.Context) (int, error)
+	FindUser(ctx context.Context, username, password string) (User, bool, error)
+	FindUserByUsername(ctx context.Context, username string) (User, bool, error)
+	AdminUser() User
+	CreateUser(ctx context.Context, username, displayName, password, role string) (User, error)
+	UpdatePassword(ctx context.Context, username, newPassword string) error
+	MustChangePassword(ctx context.Context, username string) bool
+	UpdateUserAccess(ctx context.Context, id, role, status string) error
+	ListUsers(ctx context.Context) ([]User, error)
+	TryCreateInitialAdmin(ctx context.Context, username, displayName, password string) (User, error)
+
+	// Sessions
+	CreateWebSession(ctx context.Context, userID, remoteAddr, userAgent string) (string, string, error)
+	AuthenticateWebSession(ctx context.Context, rawToken string) (User, string, string, bool, error)
+	DeleteWebSession(ctx context.Context, sessionID string) error
+	DeleteUserSessions(ctx context.Context, userID string) error
+	PruneExpiredWebSessions(ctx context.Context) error
+
+	// Agent Sessions
+	CreateSession(ctx context.Context, deviceID, remoteAddr string) (int64, error)
+	CloseSession(ctx context.Context, id int64) error
+
+	// Devices
+	UpsertDevice(ctx context.Context, d Device) error
+	CreateDevice(ctx context.Context, d Device) error
+	DeleteDevice(ctx context.Context, id string) error
+	UpdateHeartbeat(ctx context.Context, deviceID string, hb HeartbeatPayload) error
+	MarkDeviceOffline(ctx context.Context, deviceID string) error
+	ExpireDevices(ctx context.Context, cutoff string) error
+	ListDevices(ctx context.Context) ([]Device, error)
+	ListDevicesByGroup(ctx context.Context, groupName string) ([]Device, error)
+	GetDevice(ctx context.Context, id string) (Device, bool, error)
+	Stats(ctx context.Context) (DeviceStats, error)
+	Groups(ctx context.Context) ([]DeviceGroup, error)
+
+	// Tasks
+	CreateTask(ctx context.Context, deviceID, groupName, command, requestedBy string) (Task, error)
+	CreateTaskSpec(ctx context.Context, task Task) (Task, error)
+	GetTask(ctx context.Context, id string) (Task, bool, error)
+	ListTasks(ctx context.Context) ([]Task, error)
+	ListTasksByDevice(ctx context.Context, deviceID string) ([]Task, error)
+	MarkTaskRunning(ctx context.Context, taskID string) error
+	CompleteTask(ctx context.Context, result TaskResultPayload) error
+	FailTask(ctx context.Context, taskID, stderr string) error
+	TimeoutTasks(ctx context.Context, cutoff string) error
+	PendingTasksForDevice(ctx context.Context, deviceID string) ([]Task, error)
+
+	// Audit
+	CreateAudit(ctx context.Context, audit AuditLog) error
+	ListAudit(ctx context.Context) ([]AuditLog, error)
+
+	// LLM Config
+	GetLLMConfig(ctx context.Context) (LLMConfig, error)
+	SaveLLMConfig(ctx context.Context, cfg LLMConfig) error
+
+	// Enrollment
+	CreateEnrollmentCode(ctx context.Context, createdBy string, ttl time.Duration, maxUses int) (EnrollmentCode, error)
+	ListEnrollmentCodes(ctx context.Context) ([]EnrollmentCode, error)
+	RevokeEnrollmentCode(ctx context.Context, id string) error
+	EnrollDevice(ctx context.Context, rawCode string, reg RegisterPayload) (Device, string, error)
+	ValidateDeviceCredential(ctx context.Context, deviceID, secret string) (bool, error)
+	RevokeDeviceCredential(ctx context.Context, deviceID string) error
+
+	// Command Templates
+	ListCommandTemplates(ctx context.Context) ([]CommandTemplate, error)
+	GetCommandTemplate(ctx context.Context, id string) (CommandTemplate, bool, error)
+	SaveCommandTemplate(ctx context.Context, item CommandTemplate) (CommandTemplate, error)
+
+	// Lifecycle
+	Close() error
+	ConfigureEncryptionKey(raw string) error
+	ProtectStoredLLMSecret(ctx context.Context) error
+	Init(ctx context.Context) error
+	InitSecure(ctx context.Context, bootstrapPassword string) error
+}
+
+// Compile-time interface satisfaction checks.
+var _ DataStore = (*Store)(nil)
+var _ DataStore = (*JSONStore)(nil)
 
 type Store struct {
 	db            *sql.DB
@@ -73,10 +158,11 @@ func (s *Store) InitSecure(ctx context.Context, bootstrapPassword string) error 
 		return fmt.Errorf("count users: %w", err)
 	}
 	if count == 0 {
-		if len(bootstrapPassword) < 12 {
-			return fmt.Errorf("LABOPS_BOOTSTRAP_ADMIN_PASSWORD must be at least 12 characters on an empty database")
+		if len(bootstrapPassword) >= 12 {
+			return s.bootstrapAdmin(ctx, bootstrapPassword)
 		}
-		return s.bootstrapAdmin(ctx, bootstrapPassword)
+		// No bootstrap password and empty database — setup API will handle first admin.
+		return nil
 	}
 	if _, usesDefault, err := s.FindUser(ctx, "admin", "admin"); err != nil {
 		return err
@@ -123,6 +209,58 @@ func (s *Store) bootstrapAdmin(ctx context.Context, password string) error {
 		s.dialect.InsertOrIgnorePrefix()+" users (id, username, display_name, password, roles, must_change_password, status, created_at, updated_at) VALUES ('user_admin', 'admin', 'LabOps Admin', ?, 'admin', 1, 'active', ?, ?)",
 		string(hashed), now, now)
 	return err
+}
+
+// ErrAlreadyInitialized is returned by TryCreateInitialAdmin when the system
+// already has one or more user accounts.
+var ErrAlreadyInitialized = errors.New("system is already initialized")
+
+// CountUsers returns the number of user records in the database.
+func (s *Store) CountUsers(ctx context.Context) (int, error) {
+	var count int
+	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM users").Scan(&count)
+	return count, err
+}
+
+// TryCreateInitialAdmin creates the first admin user atomically. If the users
+// table already contains rows, it returns ErrAlreadyInitialized. The method
+// uses a database transaction to prevent concurrent first-admin creation.
+func (s *Store) TryCreateInitialAdmin(ctx context.Context, username, displayName, password string) (User, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return User{}, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	var count int
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM users").Scan(&count); err != nil {
+		return User{}, fmt.Errorf("count users: %w", err)
+	}
+	if count > 0 {
+		return User{}, ErrAlreadyInitialized
+	}
+
+	hashed, err := bcrypt.GenerateFromPassword([]byte(password), 12)
+	if err != nil {
+		return User{}, err
+	}
+	now := nowString()
+	id := "user_admin"
+	_, err = tx.ExecContext(ctx,
+		`INSERT INTO users (id, username, display_name, password, roles, must_change_password, status, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, 'admin', 1, 'active', ?, ?)`,
+		id, username, displayName, string(hashed), now, now)
+	if err != nil {
+		return User{}, fmt.Errorf("insert initial admin: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return User{}, fmt.Errorf("commit: %w", err)
+	}
+
+	user := User{ID: id, Username: username, DisplayName: displayName, Status: "active"}
+	applyUserAuthorization(&user, RoleAdmin)
+	return user, nil
 }
 
 func (s *Store) FindUser(ctx context.Context, username, password string) (User, bool, error) {

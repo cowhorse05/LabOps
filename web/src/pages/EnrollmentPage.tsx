@@ -16,7 +16,7 @@ export default function EnrollmentPage() {
   };
   return <div className="page">
     <div className="page-head"><div><Typography.Title level={2}>设备安全接入</Typography.Title><Typography.Text className="muted">一次性注册码只显示一次，默认 10 分钟内有效。</Typography.Text></div><Button type="primary" onClick={create}>生成注册码</Button></div>
-    <Card><Table rowKey="id" loading={loading} dataSource={data ?? []} columns={[
+    <Card><Table scroll={{ x: 'max-content' }} rowKey="id" loading={loading} dataSource={data ?? []} columns={[
       { title: 'ID', dataIndex: 'id' },
       { title: '使用次数', render: (_, row) => `${row.usedCount}/${row.maxUses}` },
       { title: '过期时间', dataIndex: 'expiresAt', render: (v) => dayjs(v).format('YYYY-MM-DD HH:mm:ss') },

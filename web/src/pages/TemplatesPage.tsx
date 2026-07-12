@@ -16,7 +16,7 @@ export default function TemplatesPage() {
   };
   return <div className="page">
     <div className="page-head"><div><Typography.Title level={2}>命令模板</Typography.Title><Typography.Text className="muted">模板直接执行绝对路径与参数数组，不经过 Shell。</Typography.Text></div><Button type="primary" onClick={() => setOpen(true)}>新建模板</Button></div>
-    <Card><Table rowKey="id" loading={loading} dataSource={data ?? []} columns={[
+    <Card><Table scroll={{ x: 'max-content' }} rowKey="id" loading={loading} dataSource={data ?? []} columns={[
       { title: '名称', dataIndex: 'name' }, { title: '可执行文件', dataIndex: 'executable' },
       { title: '参数', dataIndex: 'args', render: (v: string[]) => v.join(' ') || '-' },
       { title: '超时', dataIndex: 'timeoutSeconds', render: v => `${v}s` },

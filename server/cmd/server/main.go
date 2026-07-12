@@ -16,19 +16,31 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	dbDriver := env("LABOPS_DB_DRIVER", "mysql")
+	dbDriver := env("LABOPS_DB_DRIVER", "sqlite")
 	addr := env("LABOPS_ADDR", ":8080")
 	var dsn string
 	switch core.Driver(dbDriver) {
 	case core.DriverMySQL:
 		dsn = env("LABOPS_MYSQL_DSN", "labops:labops@tcp(127.0.0.1:3306)/labops?parseTime=true&charset=utf8mb4")
+	case core.DriverJSON:
+		dsn = env("LABOPS_DB_PATH", "data")
 	default:
 		dsn = env("LABOPS_DB_PATH", "data/labops.db")
 	}
 
-	store, err := core.OpenStore(core.Driver(dbDriver), dsn)
-	if err != nil {
-		log.Fatalf("open store: %v", err)
+	var store core.DataStore
+	if core.Driver(dbDriver) == core.DriverJSON {
+		var err error
+		store, err = core.OpenJSONStore(dsn)
+		if err != nil {
+			log.Fatalf("open json store: %v", err)
+		}
+	} else {
+		s, err := core.OpenStore(core.Driver(dbDriver), dsn)
+		if err != nil {
+			log.Fatalf("open store: %v", err)
+		}
+		store = s
 	}
 	defer store.Close()
 	if err := store.ConfigureEncryptionKey(os.Getenv("LABOPS_ENCRYPTION_KEY")); err != nil {

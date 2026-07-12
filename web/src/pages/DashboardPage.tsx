@@ -72,6 +72,7 @@ export default function DashboardPage() {
               <Skeleton active />
             ) : (
               <Table
+                scroll={{ x: 'max-content' }}
                 rowKey="id"
                 size="middle"
                 pagination={false}
@@ -116,6 +117,7 @@ export default function DashboardPage() {
         <Col xs={24} xl={12}>
           <Card title="最近任务" extra={<Button type="link" onClick={() => navigate('/tasks')}>全部任务</Button>}>
             <Table
+              scroll={{ x: 'max-content' }}
               rowKey="id"
               size="small"
               pagination={false}

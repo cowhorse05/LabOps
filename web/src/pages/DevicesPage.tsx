@@ -75,7 +75,7 @@ export default function DevicesPage() {
             aria-label="搜索设备"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            style={{ width: 280 }}
+            style={{ width: '100%', maxWidth: 280 }}
           />
           <Button icon={<ReloadOutlined />} onClick={reload}>
             刷新
@@ -84,6 +84,7 @@ export default function DevicesPage() {
       </div>
       <Card>
         <Table
+          scroll={{ x: 'max-content' }}
           rowKey="id"
           loading={loading}
           dataSource={filtered}

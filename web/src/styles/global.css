@@ -187,7 +187,7 @@ body {
 .task-output,
 .result-grid pre {
   margin: 0;
-  max-width: 520px;
+  max-width: 100%;
   max-height: 180px;
   overflow: auto;
   white-space: pre-wrap;
@@ -228,5 +228,57 @@ body {
 
   .result-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .shell-content {
+    padding: 12px;
+  }
+
+  .page {
+    max-width: 100%;
+  }
+
+  .page-head {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .page-head > div:last-child {
+    width: 100%;
+  }
+
+  .result-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .shell-header {
+    padding: 10px 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .shell-content {
+    padding: 8px;
+  }
+
+  .login-panel {
+    padding: 20px 16px;
+  }
+
+  .login-panel .login-mark {
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+  }
+
+  .page-head h2 {
+    font-size: 18px;
+  }
+
+  .shell-header .muted,
+  .shell-header .ant-tag {
+    display: none;
   }
 }

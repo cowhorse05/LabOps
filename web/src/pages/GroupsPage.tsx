@@ -20,6 +20,7 @@ export default function GroupsPage() {
       </div>
       <Card>
         <Table
+          scroll={{ x: 'max-content' }}
           rowKey="name"
           loading={loading}
           dataSource={groups ?? []}

@@ -56,7 +56,7 @@ type AiOpsReport struct {
 
 // Analyzer runs periodic AI Ops analysis over device and task data.
 type Analyzer struct {
-	store     *Store
+	store     DataStore
 	config    Config
 	llmClient *LLMClient
 
@@ -71,7 +71,7 @@ type Analyzer struct {
 }
 
 // NewAnalyzer creates an Analyzer. Call Start() to begin the analysis loop.
-func NewAnalyzer(store *Store, config Config) *Analyzer {
+func NewAnalyzer(store DataStore, config Config) *Analyzer {
 	a := &Analyzer{store: store, config: config, done: make(chan struct{})}
 	a.initLLM()
 	return a

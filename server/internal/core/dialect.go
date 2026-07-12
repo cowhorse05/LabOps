@@ -69,12 +69,15 @@ type Dialect interface {
 }
 
 // NewDialect returns the Dialect implementation for the given driver.
+// For DriverJSON, returns nil since JSON storage does not use SQL.
 func NewDialect(driver Driver) (Dialect, error) {
 	switch driver {
 	case DriverSQLite:
 		return &sqliteDialect{}, nil
 	case DriverMySQL:
 		return &mySQLDialect{}, nil
+	case DriverJSON:
+		return nil, nil
 	default:
 		return nil, fmt.Errorf("unsupported database driver: %s", driver)
 	}

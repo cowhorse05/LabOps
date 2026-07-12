@@ -26,7 +26,7 @@ type Config struct {
 }
 
 type App struct {
-	store    *Store
+	store    DataStore
 	config   Config
 	upgrader websocket.Upgrader
 	analyzer *Analyzer
@@ -68,7 +68,7 @@ func newRateLimiter(maxTokens int, interval time.Duration) *rateLimiter {
 	}
 }
 
-func NewApp(store *Store, config Config) *App {
+func NewApp(store DataStore, config Config) *App {
 	if config.HeartbeatTimeout == 0 {
 		config.HeartbeatTimeout = 35 * time.Second
 	}
@@ -146,6 +146,8 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/aiops/auto-mode", a.handleGetAutoMode)
 	mux.HandleFunc("PUT /api/aiops/auto-mode", a.handleSaveAutoMode)
 	mux.HandleFunc("GET /api/agent/ws", a.handleAgentWS)
+	mux.HandleFunc("GET /api/setup/status", a.handleSetupStatus)
+	mux.HandleFunc("POST /api/setup/admin", a.handleSetupAdmin)
 	return a.withRequestID(a.withCORS(a.withRateLimit(a.withAuth(mux))))
 }
 
@@ -184,7 +186,9 @@ func (a *App) withAuth(next http.Handler) http.Handler {
 			r.URL.Path == "/api/agent/enroll" ||
 			r.URL.Path == "/api/agent/ws" ||
 			r.URL.Path == "/api/health" ||
-			r.URL.Path == "/api/auth/login" {
+			r.URL.Path == "/api/auth/login" ||
+			r.URL.Path == "/api/setup/status" ||
+			r.URL.Path == "/api/setup/admin" {
 			next.ServeHTTP(w, r)
 			return
 		}

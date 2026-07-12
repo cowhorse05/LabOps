@@ -71,10 +71,10 @@ export default function TasksPage() {
         >
           <Space align="end" wrap>
             <Form.Item name="groupName" label="目标分组" rules={[{ required: true }]}>
-              <Select style={{ width: 240 }} placeholder="选择分组" options={groups.map((g) => ({ value: g.name, label: `${g.name} (${g.online}/${g.total})` }))} />
+              <Select style={{ width: '100%', maxWidth: 240, minWidth: 160 }} placeholder="选择分组" options={groups.map((g) => ({ value: g.name, label: `${g.name} (${g.online}/${g.total})` }))} />
             </Form.Item>
-            <Form.Item name="kind" label="执行方式" rules={[{ required: true }]}><Select style={{ width: 160 }} options={[{ value: 'template', label: '安全模板' }, ...(user?.permissions.includes('commands:adhoc') ? [{ value: 'ad_hoc', label: '临时命令' }] : [])]} /></Form.Item>
-            {kind === 'ad_hoc' ? <Form.Item name="command" label="临时命令" rules={[{ required: true }]}><Input style={{ width: 420 }} placeholder="uname -a" /></Form.Item> : <Form.Item name="templateId" label="命令模板" rules={[{ required: true }]}><Select style={{ width: 320 }} options={templates.map(item => ({ value: item.id, label: item.name }))} /></Form.Item>}
+            <Form.Item name="kind" label="执行方式" rules={[{ required: true }]}><Select style={{ width: '100%', maxWidth: 160, minWidth: 120 }} options={[{ value: 'template', label: '安全模板' }, ...(user?.permissions.includes('commands:adhoc') ? [{ value: 'ad_hoc', label: '临时命令' }] : [])]} /></Form.Item>
+            {kind === 'ad_hoc' ? <Form.Item name="command" label="临时命令" rules={[{ required: true }]}><Input style={{ width: '100%', maxWidth: 420 }} placeholder="uname -a" /></Form.Item> : <Form.Item name="templateId" label="命令模板" rules={[{ required: true }]}><Select style={{ width: '100%', maxWidth: 320 }} options={templates.map(item => ({ value: item.id, label: item.name }))} /></Form.Item>}
             <Form.Item>
               <Button type="primary" htmlType="submit" icon={<PlayCircleOutlined />} loading={submitting}>
                 下发
@@ -86,6 +86,7 @@ export default function TasksPage() {
 
       <Card title="任务记录" style={{ marginTop: 16 }}>
         <Table
+          scroll={{ x: 'max-content' }}
           rowKey="id"
           loading={loading}
           dataSource={tasks}

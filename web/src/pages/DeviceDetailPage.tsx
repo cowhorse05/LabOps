@@ -118,6 +118,7 @@ export default function DeviceDetailPage() {
 
           <Card title="最近任务" style={{ marginTop: 16 }}>
             <Table
+              scroll={{ x: 'max-content' }}
               rowKey="id"
               dataSource={tasks}
               columns={[

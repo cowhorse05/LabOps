@@ -190,7 +190,13 @@ func TestSecureBootstrapRejectsKnownOrMissingPassword(t *testing.T) {
 	store, err := OpenStore(DriverSQLite, ":memory:")
 	if err != nil { t.Fatal(err) }
 	defer store.Close()
-	if err := store.InitSecure(context.Background(), ""); err == nil { t.Fatal("empty database accepted without bootstrap password") }
+	// Empty password on an empty database: now accepted — server starts and
+	// the setup API handles first-time admin creation.
+	if err := store.InitSecure(context.Background(), ""); err != nil { t.Fatal("empty database with empty password should not error", err) }
+	// Verify no user was auto-created (server is in setup-required state)
+	count, _ := store.CountUsers(context.Background())
+	if count != 0 { t.Fatal("expected 0 users after InitSecure with empty password") }
+	// Valid bootstrap password: should auto-create admin
 	if err := store.InitSecure(context.Background(), "a-secure-bootstrap-password"); err != nil { t.Fatal(err) }
 	if _, ok, err := store.FindUser(context.Background(), "admin", "admin"); err != nil || ok { t.Fatalf("legacy default valid=%v err=%v", ok, err) }
 }
