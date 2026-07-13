@@ -14,6 +14,7 @@ export default function LoginPage() {
   const [changing, setChanging] = useState(false);
   const [setupRequired, setSetupRequired] = useState<boolean | null>(null);
   const [setupSubmitting, setSetupSubmitting] = useState(false);
+  const [checkingSetup, setCheckingSetup] = useState(false);
 
   useEffect(() => {
     setupApi
@@ -68,6 +69,21 @@ export default function LoginPage() {
       message.error(msg);
     } finally {
       setSetupSubmitting(false);
+    }
+  }
+
+  async function handleOpenSetup() {
+    setCheckingSetup(true);
+    try {
+      const status = await setupApi.status();
+      setSetupRequired(status.setupRequired);
+      if (!status.setupRequired) {
+        message.info('系统已初始化，请使用已有账号登录，或联系管理员创建账号');
+      }
+    } catch {
+      message.error('无法确认系统初始化状态，请检查后端服务是否可用');
+    } finally {
+      setCheckingSetup(false);
     }
   }
 
@@ -187,6 +203,11 @@ export default function LoginPage() {
           <Form.Item>
             <Button type="primary" htmlType="submit" block loading={loading}>
               Log in
+            </Button>
+          </Form.Item>
+          <Form.Item style={{ marginBottom: 0 }}>
+            <Button type="link" block loading={checkingSetup} onClick={handleOpenSetup}>
+              首次使用？注册管理员 / 初始化系统
             </Button>
           </Form.Item>
         </Form>

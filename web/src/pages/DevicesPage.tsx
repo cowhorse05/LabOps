@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { App, Button, Card, Form, Input, InputNumber, Modal, Popconfirm, Progress, Select, Space, Table, Tag, Typography } from 'antd';
-import { DeleteOutlined, EyeOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons';
+import { CopyOutlined, DeleteOutlined, EyeOutlined, PlusOutlined, ReloadOutlined, SafetyCertificateOutlined, SearchOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { labopsApi } from '@/api/labops';
@@ -19,7 +19,12 @@ export default function DevicesPage() {
   const [createForm] = Form.useForm();
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [enrollmentOpen, setEnrollmentOpen] = useState(false);
+  const [enrollmentCreating, setEnrollmentCreating] = useState(false);
+  const [createdCode, setCreatedCode] = useState('');
+  const [serverUrl, setServerUrl] = useState(() => window.location.origin);
   const canManage = useAuthStore((s) => s.user?.permissions.includes('devices:revoke') ?? false);
+  const canEnroll = useAuthStore((s) => s.user?.permissions.includes('enrollment:manage') ?? false);
 
   const filtered = useMemo(() => {
     const k = keyword.trim().toLowerCase();
@@ -57,6 +62,33 @@ export default function DevicesPage() {
     }
   };
 
+  const handleCreateEnrollmentCode = async () => {
+    try {
+      setEnrollmentCreating(true);
+      const item = await labopsApi.createEnrollmentCode({ expiresInSeconds: 600, maxUses: 1 });
+      setCreatedCode(item.code || '');
+      message.success('一次性注册码已生成');
+    } catch (err: any) {
+      message.error(`生成注册码失败: ${err?.response?.data?.error || err?.message}`);
+    } finally {
+      setEnrollmentCreating(false);
+    }
+  };
+
+  const closeEnrollment = () => {
+    setEnrollmentOpen(false);
+    setCreatedCode('');
+  };
+
+  const enrollCommand = createdCode
+    ? `sudo labops-agent --server=${serverUrl || '<LABOPS_SERVER_URL>'} --enroll-code=${createdCode} --name "$(hostname)" --group lab --real`
+    : '';
+
+  const copyText = async (value: string, success: string) => {
+    await navigator.clipboard.writeText(value);
+    message.success(success);
+  };
+
   return (
     <div className="page">
       <div className="page-head">
@@ -64,9 +96,14 @@ export default function DevicesPage() {
           <Typography.Title level={2}>设备</Typography.Title>
           <Typography.Text className="muted">Agent 连接后会自动出现在这里，也可以手动创建。</Typography.Text>
         </div>
-        <Space>
-          {canManage && <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalVisible(true)}>
-            新建设备
+        <Space wrap>
+          {canEnroll && (
+            <Button type="primary" icon={<SafetyCertificateOutlined />} onClick={() => setEnrollmentOpen(true)}>
+              添加设备
+            </Button>
+          )}
+          {canManage && <Button icon={<PlusOutlined />} onClick={() => setCreateModalVisible(true)}>
+            手动创建设备
           </Button>}
           <Input
             allowClear
@@ -143,7 +180,51 @@ export default function DevicesPage() {
         />
       </Card>
       <Modal
-        title="新建设备"
+        title="添加 Linux Agent 设备"
+        open={enrollmentOpen}
+        onCancel={closeEnrollment}
+        footer={[
+          <Button key="close" onClick={closeEnrollment}>关闭</Button>,
+          <Button key="create" type="primary" loading={enrollmentCreating} onClick={handleCreateEnrollmentCode}>生成一次性注册码</Button>,
+        ]}
+        width={720}
+      >
+        <Typography.Paragraph className="muted">
+          注册码只显示一次，默认 10 分钟内有效且限用 1 次。目标主机必须能访问下面的 Server URL。
+        </Typography.Paragraph>
+        <Form layout="vertical">
+          <Form.Item label="Server URL">
+            <Input
+              value={serverUrl}
+              onChange={(event) => setServerUrl(event.target.value)}
+              placeholder="例如: https://cowhorse.xyz 或 http://你的本机IP:18080"
+            />
+          </Form.Item>
+        </Form>
+        {createdCode ? (
+          <Space direction="vertical" size={14} style={{ width: '100%' }}>
+            <div>
+              <Typography.Text strong>一次性注册码</Typography.Text>
+              <Space.Compact block style={{ marginTop: 8 }}>
+                <Input.Password value={createdCode} readOnly visibilityToggle />
+                <Button icon={<CopyOutlined />} onClick={() => copyText(createdCode, '注册码已复制')}>复制</Button>
+              </Space.Compact>
+            </div>
+            <div>
+              <Typography.Text strong>Ubuntu/Linux 登记命令</Typography.Text>
+              <Typography.Paragraph className="task-output" copyable={{ text: enrollCommand }} style={{ marginTop: 8 }}>
+                <code>{enrollCommand}</code>
+              </Typography.Paragraph>
+            </div>
+          </Space>
+        ) : (
+          <Card size="small">
+            <Typography.Text>点击“生成一次性注册码”后，把生成的命令复制到目标 Linux 主机执行。</Typography.Text>
+          </Card>
+        )}
+      </Modal>
+      <Modal
+        title="手动创建设备"
         open={createModalVisible}
         onOk={handleCreate}
         onCancel={() => { setCreateModalVisible(false); createForm.resetFields(); }}
