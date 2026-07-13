@@ -97,14 +97,18 @@ func columnExists(ctx context.Context, tx *sql.Tx, dialect Dialect, table, colum
 	return count > 0, err
 }
 
-func (s *Store) seedCommandTemplates(ctx context.Context) error {
-	templates := []CommandTemplate{
+func defaultCommandTemplates() []CommandTemplate {
+	return []CommandTemplate{
 		{ID: "tpl_hostname", Name: "主机名", Description: "显示设备主机名", OS: "linux", Executable: "/bin/hostname", Args: []string{}, Enabled: true, TimeoutSeconds: 15},
 		{ID: "tpl_uptime", Name: "在线时长", Description: "显示系统在线时间和负载", OS: "linux", Executable: "/usr/bin/uptime", Args: []string{}, Enabled: true, TimeoutSeconds: 15},
 		{ID: "tpl_disk", Name: "磁盘占用", Description: "显示文件系统磁盘用量", OS: "linux", Executable: "/bin/df", Args: []string{"-h"}, Enabled: true, TimeoutSeconds: 30},
 		{ID: "tpl_memory", Name: "内存占用", Description: "显示系统内存用量", OS: "linux", Executable: "/usr/bin/free", Args: []string{"-h"}, Enabled: true, TimeoutSeconds: 15},
 		{ID: "tpl_processes", Name: "进程摘要", Description: "按 CPU 使用率显示进程摘要", OS: "linux", Executable: "/bin/ps", Args: []string{"-eo", "pid,user,pcpu,pmem,comm", "--sort=-pcpu"}, Enabled: true, TimeoutSeconds: 30},
 	}
+}
+
+func (s *Store) seedCommandTemplates(ctx context.Context) error {
+	templates := defaultCommandTemplates()
 	for _, template := range templates {
 		argsJSON, _ := json.Marshal(template.Args)
 		paramsJSON, _ := json.Marshal(template.Parameters)

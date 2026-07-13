@@ -2,13 +2,19 @@ package core
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rand"
+	"crypto/subtle"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,8 +25,9 @@ import (
 // files in a directory. It uses in-memory maps with a read-write mutex for
 // concurrent access, and writes entire collections to disk on each mutation.
 type JSONStore struct {
-	mu      sync.RWMutex
-	dataDir string
+	mu            sync.RWMutex
+	dataDir       string
+	encryptionKey []byte
 
 	users             map[string]*jsonUser
 	devices           map[string]*jsonDevice
@@ -37,15 +44,15 @@ type JSONStore struct {
 // --- JSON record types (mirror domain types for serialization) ---
 
 type jsonUser struct {
-	ID                string `json:"id"`
-	Username          string `json:"username"`
-	DisplayName       string `json:"displayName"`
-	Password          string `json:"password"` // bcrypt hash
-	Roles             string `json:"roles"`
-	MustChangePwd     int    `json:"mustChangePassword"`
-	Status            string `json:"status"`
-	CreatedAt         string `json:"createdAt"`
-	UpdatedAt         string `json:"updatedAt"`
+	ID            string `json:"id"`
+	Username      string `json:"username"`
+	DisplayName   string `json:"displayName"`
+	Password      string `json:"password"` // bcrypt hash
+	Roles         string `json:"roles"`
+	MustChangePwd int    `json:"mustChangePassword"`
+	Status        string `json:"status"`
+	CreatedAt     string `json:"createdAt"`
+	UpdatedAt     string `json:"updatedAt"`
 }
 
 type jsonDevice struct {
@@ -127,8 +134,7 @@ type jsonSession struct {
 
 type jsonEnrollmentCode struct {
 	ID        string `json:"id"`
-	Code      string `json:"code"`      // plaintext code (no hashing in json mode)
-	CodeHash  string `json:"codeHash"`  // SHA-256 for lookup
+	CodeHash  string `json:"codeHash"`
 	ExpiresAt string `json:"expiresAt"`
 	MaxUses   int    `json:"maxUses"`
 	UsedCount int    `json:"usedCount"`
@@ -139,8 +145,7 @@ type jsonEnrollmentCode struct {
 
 type jsonDeviceCredential struct {
 	DeviceID   string `json:"deviceId"`
-	Secret     string `json:"secret"`     // plaintext secret (no hashing in json mode)
-	SecretHash string `json:"secretHash"` // SHA-256 for lookup
+	SecretHash string `json:"secretHash"`
 	Status     string `json:"status"`
 	CreatedAt  string `json:"createdAt"`
 	LastUsedAt string `json:"lastUsedAt,omitempty"`
@@ -148,18 +153,18 @@ type jsonDeviceCredential struct {
 }
 
 type jsonTemplate struct {
-	ID                string               `json:"id"`
-	Name              string               `json:"name"`
-	Description       string               `json:"description,omitempty"`
-	OS                string               `json:"os"`
-	Executable        string               `json:"executable"`
-	Args              []string             `json:"args,omitempty"`
-	Parameters        []TemplateParameter  `json:"parameters,omitempty"`
-	RequiresPrivilege bool                 `json:"requiresPrivilege"`
-	Enabled           bool                 `json:"enabled"`
-	TimeoutSeconds    int                  `json:"timeoutSeconds"`
-	CreatedAt         string               `json:"createdAt"`
-	UpdatedAt         string               `json:"updatedAt"`
+	ID                string              `json:"id"`
+	Name              string              `json:"name"`
+	Description       string              `json:"description,omitempty"`
+	OS                string              `json:"os"`
+	Executable        string              `json:"executable"`
+	Args              []string            `json:"args,omitempty"`
+	Parameters        []TemplateParameter `json:"parameters,omitempty"`
+	RequiresPrivilege bool                `json:"requiresPrivilege"`
+	Enabled           bool                `json:"enabled"`
+	TimeoutSeconds    int                 `json:"timeoutSeconds"`
+	CreatedAt         string              `json:"createdAt"`
+	UpdatedAt         string              `json:"updatedAt"`
 }
 
 type jsonLLMConfig struct {
@@ -278,22 +283,48 @@ func (js *JSONStore) Close() error {
 }
 
 func (js *JSONStore) ConfigureEncryptionKey(raw string) error {
-	return nil // JSON store does not support encryption at rest
+	if strings.TrimSpace(raw) == "" {
+		js.encryptionKey = nil
+		return nil
+	}
+	key, err := base64.StdEncoding.DecodeString(strings.TrimSpace(raw))
+	if err != nil || len(key) != 32 {
+		return fmt.Errorf("LABOPS_ENCRYPTION_KEY must be standard base64 encoding of exactly 32 random bytes")
+	}
+	js.encryptionKey = key
+	return nil
 }
 
 func (js *JSONStore) ProtectStoredLLMSecret(ctx context.Context) error {
-	return nil
+	js.mu.Lock()
+	defer js.mu.Unlock()
+	if len(js.encryptionKey) == 0 || js.llmConfig == nil || js.llmConfig.APIKey == "" || strings.HasPrefix(js.llmConfig.APIKey, encryptedSecretPrefix) {
+		return nil
+	}
+	protected, err := js.encryptSecret(js.llmConfig.APIKey)
+	if err != nil {
+		return err
+	}
+	js.llmConfig.APIKey = protected
+	js.llmConfig.UpdatedAt = nowString()
+	return js.saveFile("llm_config.json", js.llmConfig)
 }
 
 func (js *JSONStore) Init(ctx context.Context) error {
 	js.mu.Lock()
 	defer js.mu.Unlock()
+	if err := js.seedCommandTemplatesLocked(); err != nil {
+		return err
+	}
 	return js.bootstrapAdminLocked("admin")
 }
 
 func (js *JSONStore) InitSecure(ctx context.Context, bootstrapPassword string) error {
 	js.mu.Lock()
 	defer js.mu.Unlock()
+	if err := js.seedCommandTemplatesLocked(); err != nil {
+		return err
+	}
 	if len(js.users) == 0 {
 		if len(bootstrapPassword) >= 12 {
 			return js.bootstrapAdminLocked(bootstrapPassword)
@@ -380,7 +411,7 @@ func (js *JSONStore) FindUser(ctx context.Context, username, password string) (U
 		Status:      rec.Status,
 	}
 	applyUserAuthorization(&user, rec.Roles)
-	return user, false, nil // false = not using default password
+	return user, true, nil
 }
 
 func (js *JSONStore) FindUserByUsername(ctx context.Context, username string) (User, bool, error) {
@@ -1053,15 +1084,21 @@ func (js *JSONStore) ListAudit(ctx context.Context) ([]AuditLog, error) {
 // --- Enrollment ---
 
 func (js *JSONStore) CreateEnrollmentCode(ctx context.Context, createdBy string, ttl time.Duration, maxUses int) (EnrollmentCode, error) {
+	if ttl <= 0 || ttl > time.Hour || maxUses < 1 || maxUses > 20 {
+		return EnrollmentCode{}, fmt.Errorf("ttl must be at most 1 hour and maxUses between 1 and 20")
+	}
 	js.mu.Lock()
 	defer js.mu.Unlock()
-	code := randomHex(16)
+	code, err := randomToken(24)
+	if err != nil {
+		return EnrollmentCode{}, err
+	}
 	id := "enroll_" + newID("")
 	now := nowString()
 	js.enrollmentCodes[id] = &jsonEnrollmentCode{
-		ID: id, Code: code, CodeHash: tokenHash(code),
+		ID: id, CodeHash: tokenHash(code),
 		ExpiresAt: time.Now().UTC().Add(ttl).Format(time.RFC3339),
-		MaxUses: maxUses, CreatedBy: createdBy, CreatedAt: now,
+		MaxUses:   maxUses, CreatedBy: createdBy, CreatedAt: now,
 	}
 	_ = js.saveFile("enrollment_codes.json", js.enrollmentCodes)
 	return EnrollmentCode{ID: id, Code: code, ExpiresAt: js.enrollmentCodes[id].ExpiresAt, MaxUses: maxUses, UsedCount: 0, CreatedBy: createdBy, CreatedAt: now}, nil
@@ -1118,7 +1155,7 @@ func (js *JSONStore) EnrollDevice(ctx context.Context, rawCode string, reg Regis
 	secret := randomHex(32)
 	now := nowString()
 	js.deviceCredentials[deviceID] = &jsonDeviceCredential{
-		DeviceID: deviceID, Secret: secret, SecretHash: tokenHash(secret),
+		DeviceID: deviceID, SecretHash: tokenHash(secret),
 		Status: "active", CreatedAt: now,
 	}
 	_ = js.saveFile("device_credentials.json", js.deviceCredentials)
@@ -1144,13 +1181,18 @@ func (js *JSONStore) EnrollDevice(ctx context.Context, rawCode string, reg Regis
 }
 
 func (js *JSONStore) ValidateDeviceCredential(ctx context.Context, deviceID, secret string) (bool, error) {
-	js.mu.RLock()
-	defer js.mu.RUnlock()
+	js.mu.Lock()
+	defer js.mu.Unlock()
 	dc, ok := js.deviceCredentials[deviceID]
 	if !ok || dc.Status != "active" {
 		return false, nil
 	}
-	return dc.Secret == secret, nil
+	valid := subtle.ConstantTimeCompare([]byte(tokenHash(secret)), []byte(dc.SecretHash)) == 1
+	if valid {
+		dc.LastUsedAt = nowString()
+		_ = js.saveFile("device_credentials.json", js.deviceCredentials)
+	}
+	return valid, nil
 }
 
 func (js *JSONStore) RevokeDeviceCredential(ctx context.Context, deviceID string) error {
@@ -1206,6 +1248,9 @@ func (js *JSONStore) GetCommandTemplate(ctx context.Context, id string) (Command
 func (js *JSONStore) SaveCommandTemplate(ctx context.Context, item CommandTemplate) (CommandTemplate, error) {
 	js.mu.Lock()
 	defer js.mu.Unlock()
+	if err := validateTemplate(item); err != nil {
+		return CommandTemplate{}, err
+	}
 	now := nowString()
 	if item.ID == "" {
 		item.ID = "tmpl_" + newID("")
@@ -1222,13 +1267,38 @@ func (js *JSONStore) SaveCommandTemplate(ctx context.Context, item CommandTempla
 	return item, nil
 }
 
+func (js *JSONStore) seedCommandTemplatesLocked() error {
+	if len(js.templates) > 0 {
+		return nil
+	}
+	now := nowString()
+	for _, item := range defaultCommandTemplates() {
+		if err := validateTemplate(item); err != nil {
+			return err
+		}
+		item.CreatedAt = now
+		item.UpdatedAt = now
+		js.templates[item.ID] = &jsonTemplate{
+			ID: item.ID, Name: item.Name, Description: item.Description, OS: item.OS,
+			Executable: item.Executable, Args: item.Args, Parameters: item.Parameters,
+			RequiresPrivilege: item.RequiresPrivilege, Enabled: item.Enabled,
+			TimeoutSeconds: item.TimeoutSeconds, CreatedAt: item.CreatedAt, UpdatedAt: item.UpdatedAt,
+		}
+	}
+	return js.saveFile("templates.json", js.templates)
+}
+
 // --- LLM Config ---
 
 func (js *JSONStore) GetLLMConfig(ctx context.Context) (LLMConfig, error) {
 	js.mu.RLock()
 	defer js.mu.RUnlock()
+	apiKey, err := js.decryptSecret(js.llmConfig.APIKey)
+	if err != nil {
+		return LLMConfig{}, err
+	}
 	return LLMConfig{
-		ProviderURL: js.llmConfig.ProviderURL, APIKey: js.llmConfig.APIKey,
+		ProviderURL: js.llmConfig.ProviderURL, APIKey: apiKey,
 		Model: js.llmConfig.Model, ProviderType: js.llmConfig.ProviderType,
 		Enabled: js.llmConfig.Enabled, AutoExecuteReadOnly: js.llmConfig.AutoExecuteReadOnly,
 		UpdatedAt: js.llmConfig.UpdatedAt,
@@ -1238,14 +1308,68 @@ func (js *JSONStore) GetLLMConfig(ctx context.Context) (LLMConfig, error) {
 func (js *JSONStore) SaveLLMConfig(ctx context.Context, cfg LLMConfig) error {
 	js.mu.Lock()
 	defer js.mu.Unlock()
+	apiKey, err := js.encryptSecret(cfg.APIKey)
+	if err != nil {
+		return err
+	}
 	js.llmConfig.ProviderURL = cfg.ProviderURL
-	js.llmConfig.APIKey = cfg.APIKey
+	js.llmConfig.APIKey = apiKey
 	js.llmConfig.Model = cfg.Model
 	js.llmConfig.ProviderType = cfg.ProviderType
 	js.llmConfig.Enabled = cfg.Enabled
 	js.llmConfig.AutoExecuteReadOnly = cfg.AutoExecuteReadOnly
 	js.llmConfig.UpdatedAt = nowString()
 	return js.saveFile("llm_config.json", js.llmConfig)
+}
+
+func (js *JSONStore) encryptSecret(value string) (string, error) {
+	if value == "" || strings.HasPrefix(value, encryptedSecretPrefix) || len(js.encryptionKey) == 0 {
+		return value, nil
+	}
+	block, err := aes.NewCipher(js.encryptionKey)
+	if err != nil {
+		return "", err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return "", err
+	}
+	ciphertext := gcm.Seal(nil, nonce, []byte(value), nil)
+	payload := append(nonce, ciphertext...)
+	return encryptedSecretPrefix + base64.RawStdEncoding.EncodeToString(payload), nil
+}
+
+func (js *JSONStore) decryptSecret(value string) (string, error) {
+	if value == "" || !strings.HasPrefix(value, encryptedSecretPrefix) {
+		return value, nil
+	}
+	if len(js.encryptionKey) == 0 {
+		return "", fmt.Errorf("encrypted value exists but LABOPS_ENCRYPTION_KEY is not configured")
+	}
+	payload, err := base64.RawStdEncoding.DecodeString(strings.TrimPrefix(value, encryptedSecretPrefix))
+	if err != nil {
+		return "", err
+	}
+	block, err := aes.NewCipher(js.encryptionKey)
+	if err != nil {
+		return "", err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+	if len(payload) < gcm.NonceSize() {
+		return "", fmt.Errorf("encrypted payload is truncated")
+	}
+	plain, err := gcm.Open(nil, payload[:gcm.NonceSize()], payload[gcm.NonceSize():], nil)
+	if err != nil {
+		return "", err
+	}
+	return string(plain), nil
 }
 
 // userByIDLocked finds a user by ID (caller must hold at least RLock)
