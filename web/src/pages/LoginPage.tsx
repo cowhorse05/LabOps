@@ -1,29 +1,49 @@
-import { useEffect, useState } from 'react';
-import { Navigate } from 'react-router-dom';
-import { App, Button, Form, Input, Typography, Spin } from 'antd';
-import { UserOutlined, LockOutlined } from '@ant-design/icons';
+import { useEffect, useRef, useState } from 'react';
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
+import { Alert, App, Button, Form, Input, Spin, Typography } from 'antd';
+import { LockOutlined, UserOutlined } from '@ant-design/icons';
 import { authApi, setupApi } from '@/api/labops';
 import { useAuthStore } from '@/stores/auth';
+import type { SystemStatus } from '@/types';
+import { setupStatusMessage, shouldShowSetupEntry } from '@/utils/setup';
 
 export default function LoginPage() {
   const { message } = App.useApp();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const user = useAuthStore((s) => s.user);
   const mustChangePwd = useAuthStore((s) => s.mustChangePassword);
   const setAuth = useAuthStore((s) => s.setAuth);
   const [loading, setLoading] = useState(false);
   const [changing, setChanging] = useState(false);
-  const [setupRequired, setSetupRequired] = useState<boolean | null>(null);
-  const [setupSubmitting, setSetupSubmitting] = useState(false);
-  const [checkingSetup, setCheckingSetup] = useState(false);
+  const [status, setStatus] = useState<SystemStatus | null>(null);
+  const [checkingStatus, setCheckingStatus] = useState(true);
+  const successShown = useRef(false);
 
   useEffect(() => {
-    setupApi
-      .status()
-      .then((res) => setSetupRequired(res.setupRequired))
-      .catch(() => setSetupRequired(false));
+    let cancelled = false;
+    setupApi.systemStatus()
+      .then((result) => {
+        if (!cancelled) setStatus(result);
+      })
+      .catch(() => {
+        if (!cancelled) setStatus(null);
+      })
+      .finally(() => {
+        if (!cancelled) setCheckingStatus(false);
+      });
+    return () => { cancelled = true; };
   }, []);
 
-  // Already logged in and no forced change — go to dashboard
+  useEffect(() => {
+    if (searchParams.get('setup') !== 'success' || successShown.current) return;
+    const key = 'labops.setup.success.shown';
+    if (sessionStorage.getItem(key) === 'true') return;
+    successShown.current = true;
+    sessionStorage.setItem(key, 'true');
+    message.success('管理员创建成功，请使用新账号登录');
+  }, [message, searchParams]);
+
   if (user && !mustChangePwd) {
     return <Navigate to="/" replace />;
   }
@@ -50,58 +70,26 @@ export default function LoginPage() {
       setAuth(useAuthStore.getState().user!, false);
       message.success('Password changed successfully');
     } catch (err: any) {
-      const msg = err?.response?.data?.error || 'Failed to change password';
+      const msg = err?.response?.data?.message || err?.response?.data?.error || 'Failed to change password';
       message.error(msg);
     } finally {
       setChanging(false);
     }
   }
 
-  async function handleSetup(values: { username: string; password: string; confirmPassword: string }) {
-    setSetupSubmitting(true);
-    try {
-      const result = await setupApi.createAdmin(values);
-      setAuth(result.user, result.mustChangePassword ?? false);
-      setSetupRequired(false);
-      message.success('Administrator created — please change your password');
-    } catch (err: any) {
-      const msg = err?.response?.data?.error || 'Setup failed';
-      message.error(msg);
-    } finally {
-      setSetupSubmitting(false);
-    }
-  }
-
-  async function handleOpenSetup() {
-    setCheckingSetup(true);
-    try {
-      const status = await setupApi.status();
-      setSetupRequired(status.setupRequired);
-      if (!status.setupRequired) {
-        message.info('系统已初始化，请使用已有账号登录，或联系管理员创建账号');
-      }
-    } catch {
-      message.error('无法确认系统初始化状态，请检查后端服务是否可用');
-    } finally {
-      setCheckingSetup(false);
-    }
-  }
-
-  // Loading state while checking setup status
-  if (setupRequired === null && !user) {
+  if (checkingStatus && !user) {
     return (
       <div className="login-page">
         <div className="login-panel" style={{ textAlign: 'center' }}>
           <Spin size="large" />
           <Typography.Text type="secondary" style={{ display: 'block', marginTop: 16 }}>
-            Checking system status...
+            正在检查系统初始化状态…
           </Typography.Text>
         </div>
       </div>
     );
   }
 
-  // Show change password form if forced
   if (user && mustChangePwd) {
     return (
       <div className="login-page">
@@ -134,55 +122,8 @@ export default function LoginPage() {
     );
   }
 
-  // Setup form — system is uninitialized, no admin exists
-  if (setupRequired && !user) {
-    return (
-      <div className="login-page">
-        <div className="login-panel">
-          <div className="login-mark">L</div>
-          <Typography.Title level={3} style={{ textAlign: 'center' }}>
-            Create First Administrator
-          </Typography.Title>
-          <Typography.Text type="secondary" style={{ display: 'block', textAlign: 'center', marginBottom: 24 }}>
-            No users exist yet. Create the first admin account to get started.
-          </Typography.Text>
-          <Form onFinish={handleSetup} className="login-form" size="large">
-            <Form.Item name="username" rules={[
-              { required: true, message: 'Enter username' },
-              { min: 3, message: 'At least 3 characters' },
-              { pattern: /^[a-z0-9]+$/, message: 'Lowercase letters and numbers only' },
-            ]}>
-              <Input prefix={<UserOutlined />} placeholder="Username (lowercase, 3+ chars)" autoFocus />
-            </Form.Item>
-            <Form.Item name="password" rules={[
-              { required: true, message: 'Enter password' },
-              { min: 12, message: 'At least 12 characters' },
-            ]}>
-              <Input.Password prefix={<LockOutlined />} placeholder="Password (min 12 chars)" />
-            </Form.Item>
-            <Form.Item name="confirmPassword" dependencies={['password']} rules={[
-              { required: true, message: 'Confirm your password' },
-              ({ getFieldValue }) => ({
-                validator(_, value) {
-                  if (!value || getFieldValue('password') === value) return Promise.resolve();
-                  return Promise.reject(new Error('Passwords do not match'));
-                },
-              }),
-            ]}>
-              <Input.Password prefix={<LockOutlined />} placeholder="Confirm password" />
-            </Form.Item>
-            <Form.Item>
-              <Button type="primary" htmlType="submit" block loading={setupSubmitting}>
-                Create Administrator
-              </Button>
-            </Form.Item>
-          </Form>
-        </div>
-      </div>
-    );
-  }
+  const needsSetup = shouldShowSetupEntry(status);
 
-  // Normal login
   return (
     <div className="login-page">
       <div className="login-panel">
@@ -193,24 +134,33 @@ export default function LoginPage() {
         <Typography.Text type="secondary" style={{ display: 'block', textAlign: 'center', marginBottom: 24 }}>
           Lightweight Operations Platform
         </Typography.Text>
-        <Form onFinish={handleLogin} className="login-form" size="large">
-          <Form.Item name="username" rules={[{ required: true, message: 'Enter username' }]}>
-            <Input prefix={<UserOutlined />} placeholder="Username" autoFocus />
-          </Form.Item>
-          <Form.Item name="password" rules={[{ required: true, message: 'Enter password' }]}>
-            <Input.Password prefix={<LockOutlined />} placeholder="Password" />
-          </Form.Item>
-          <Form.Item>
-            <Button type="primary" htmlType="submit" block loading={loading}>
-              Log in
+        {needsSetup ? (
+          <>
+            <Alert
+              type={status?.recoveryRequired ? 'warning' : 'info'}
+              showIcon
+              style={{ marginBottom: 18 }}
+              message={setupStatusMessage(status)}
+            />
+            <Button type="primary" block size="large" onClick={() => navigate('/setup')}>
+              创建首个管理员
             </Button>
-          </Form.Item>
-          <Form.Item style={{ marginBottom: 0 }}>
-            <Button type="link" block loading={checkingSetup} onClick={handleOpenSetup}>
-              首次使用？注册管理员 / 初始化系统
-            </Button>
-          </Form.Item>
-        </Form>
+          </>
+        ) : (
+          <Form onFinish={handleLogin} className="login-form" size="large">
+            <Form.Item name="username" rules={[{ required: true, message: 'Enter username' }]}>
+              <Input prefix={<UserOutlined />} placeholder="Username" autoFocus />
+            </Form.Item>
+            <Form.Item name="password" rules={[{ required: true, message: 'Enter password' }]}>
+              <Input.Password prefix={<LockOutlined />} placeholder="Password" />
+            </Form.Item>
+            <Form.Item>
+              <Button type="primary" htmlType="submit" block loading={loading}>
+                Log in
+              </Button>
+            </Form.Item>
+          </Form>
+        )}
       </div>
     </div>
   );

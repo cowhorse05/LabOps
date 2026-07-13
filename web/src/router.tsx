@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { useEffect, useState, type ReactNode } from 'react';
 import AppLayout from '@/layouts/AppLayout';
 import LoginPage from '@/pages/LoginPage';
+import SetupPage from '@/pages/SetupPage';
 import DashboardPage from '@/pages/DashboardPage';
 import DevicesPage from '@/pages/DevicesPage';
 import DeviceDetailPage from '@/pages/DeviceDetailPage';
@@ -36,6 +37,10 @@ export const router = createBrowserRouter([
   {
     path: '/login',
     element: <LoginPage />,
+  },
+  {
+    path: '/setup',
+    element: <SetupPage />,
   },
   {
     path: '/',

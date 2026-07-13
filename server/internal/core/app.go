@@ -146,6 +146,8 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/aiops/auto-mode", a.handleGetAutoMode)
 	mux.HandleFunc("PUT /api/aiops/auto-mode", a.handleSaveAutoMode)
 	mux.HandleFunc("GET /api/agent/ws", a.handleAgentWS)
+	mux.HandleFunc("GET /api/v1/system/status", a.handleSystemStatus)
+	mux.HandleFunc("POST /api/v1/system/bootstrap", a.handleSystemBootstrap)
 	mux.HandleFunc("GET /api/setup/status", a.handleSetupStatus)
 	mux.HandleFunc("POST /api/setup/admin", a.handleSetupAdmin)
 	return a.withRequestID(a.withCORS(a.withRateLimit(a.withAuth(mux))))
@@ -187,6 +189,8 @@ func (a *App) withAuth(next http.Handler) http.Handler {
 			r.URL.Path == "/api/agent/ws" ||
 			r.URL.Path == "/api/health" ||
 			r.URL.Path == "/api/auth/login" ||
+			r.URL.Path == "/api/v1/system/status" ||
+			r.URL.Path == "/api/v1/system/bootstrap" ||
 			r.URL.Path == "/api/setup/status" ||
 			r.URL.Path == "/api/setup/admin" {
 			next.ServeHTTP(w, r)
@@ -276,6 +280,8 @@ func (a *App) withRateLimit(next http.Handler) http.Handler {
 		interval := time.Second
 		if r.URL.Path == "/api/auth/login" {
 			key, maxTokens, interval = "login:"+ip, 5, 3*time.Minute
+		} else if r.URL.Path == "/api/v1/system/bootstrap" || r.URL.Path == "/api/setup/admin" {
+			key, maxTokens, interval = "bootstrap:"+ip, 5, 3*time.Minute
 		} else if r.URL.Path == "/api/agent/enroll" {
 			key, maxTokens, interval = "enroll:"+ip, 10, time.Minute
 		}

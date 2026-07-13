@@ -29,6 +29,22 @@ type User struct {
 	Status      string   `json:"status"`
 }
 
+type SetupStatus struct {
+	Initialized         bool `json:"initialized"`
+	AdminExists         bool `json:"adminExists"`
+	ActiveAdminExists   bool `json:"activeAdminExists"`
+	RegistrationAllowed bool `json:"registrationAllowed"`
+	RecoveryRequired    bool `json:"recoveryRequired"`
+	TotalUsers          int  `json:"totalUsers"`
+}
+
+type BootstrapAdminInput struct {
+	Username        string `json:"username"`
+	Password        string `json:"password"`
+	ConfirmPassword string `json:"confirmPassword"`
+	DisplayName     string `json:"displayName"`
+}
+
 type Device struct {
 	ID               string  `json:"id"`
 	Name             string  `json:"name"`

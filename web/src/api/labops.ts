@@ -1,12 +1,20 @@
 import { api } from './client';
-import type { AiOpsLLMConfig, AuditLog, CommandTemplate, Device, DeviceGroup, DeviceStats, EnrollmentCode, LLMRecommendation, LLMTestResult, Task, User } from '@/types';
+import type { AiOpsLLMConfig, AuditLog, CommandTemplate, Device, DeviceGroup, DeviceStats, EnrollmentCode, LLMRecommendation, LLMTestResult, SystemStatus, Task, User } from '@/types';
 
 export const setupApi = {
+  async systemStatus() {
+    const { data } = await api.get<SystemStatus>('/v1/system/status');
+    return data;
+  },
   async status() {
     const { data } = await api.get<{ setupRequired: boolean }>('/setup/status');
     return data;
   },
-  async createAdmin(input: { username: string; password: string; confirmPassword: string }) {
+  async bootstrap(input: { username: string; password: string; confirmPassword: string; displayName?: string }) {
+    const { data } = await api.post<{ user: User; mustChangePassword: boolean }>('/v1/system/bootstrap', input);
+    return data;
+  },
+  async createAdmin(input: { username: string; password: string; confirmPassword: string; displayName?: string }) {
     const { data } = await api.post<{ user: User; mustChangePassword: boolean }>('/setup/admin', input);
     return data;
   },

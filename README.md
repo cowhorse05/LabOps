@@ -110,7 +110,29 @@ bash scripts/compose-down.sh
 
 ### First Administrator
 
-LabOps has **no default password**. Local development bootstraps `admin` with the password configured in `compose.dev.yaml` and forces an immediate password change. Production requires `LABOPS_BOOTSTRAP_ADMIN_PASSWORD` in the untracked `.env` file.
+LabOps has **no default password** and does not expose public user registration.
+
+On a fresh local or production deployment:
+
+1. Start the Server and Web console.
+2. Open `/login`.
+3. If no active administrator exists, click **Create first administrator**.
+4. Create the first admin account with a 12+ character password.
+5. Return to `/login` and sign in with the new admin account.
+6. Create additional users from **Users & Roles** inside the authenticated console.
+
+The bootstrap endpoint is only open while LabOps has no active administrator. If an earlier failed setup left user data behind but no usable admin account, the login page enters a recovery state and allows creating one active administrator without deleting existing data. Once an active admin exists, `/setup` is closed and returns to `/login`.
+
+For lightweight local persistence, set:
+
+```env
+LABOPS_DB_DRIVER=jsonfile
+LABOPS_DB_PATH=data/labops
+```
+
+JSON mode stores users, sessions, devices, enrollment codes, templates, and settings under `LABOPS_DB_PATH`. Back up that directory before upgrades or manual repair. SQLite deployments should back up the `LABOPS_DB_PATH` database file. MySQL deployments should use `mysqldump` or the documented backup job.
+
+If an admin password is forgotten, prefer restoring from backup or using the recovery flow only when the system truly has no active admin. Do not edit password hashes manually or store plaintext passwords in the data files.
 
 ### Run Tests
 

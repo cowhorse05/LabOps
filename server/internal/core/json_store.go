@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -195,19 +196,27 @@ func OpenJSONStore(dataDir string) (*JSONStore, error) {
 		templates:         make(map[string]*jsonTemplate),
 		llmConfig:         &jsonLLMConfig{ProviderType: "openai"},
 	}
-	js.loadAll()
+	if err := js.loadAll(); err != nil {
+		return nil, err
+	}
 	return js, nil
 }
 
 // --- File I/O helpers ---
 
-func (js *JSONStore) loadFile(name string, dst any) {
+func (js *JSONStore) loadFile(name string, dst any) error {
 	path := filepath.Join(js.dataDir, name)
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("read %s: %w", name, err)
 	}
-	_ = json.Unmarshal(data, dst)
+	if err := json.Unmarshal(data, dst); err != nil {
+		return fmt.Errorf("parse %s: %w", name, err)
+	}
+	return nil
 }
 
 func (js *JSONStore) saveFile(name string, src any) error {
@@ -223,17 +232,26 @@ func (js *JSONStore) saveFile(name string, src any) error {
 	return os.Rename(tmp, path)
 }
 
-func (js *JSONStore) loadAll() {
-	js.loadFile("users.json", &js.users)
-	js.loadFile("devices.json", &js.devices)
-	js.loadFile("tasks.json", &js.tasks)
-	js.loadFile("task_results.json", &js.taskResults)
-	js.loadFile("audit_logs.json", &js.auditLogs)
-	js.loadFile("sessions.json", &js.sessions)
-	js.loadFile("enrollment_codes.json", &js.enrollmentCodes)
-	js.loadFile("device_credentials.json", &js.deviceCredentials)
-	js.loadFile("templates.json", &js.templates)
-	js.loadFile("llm_config.json", &js.llmConfig)
+func (js *JSONStore) loadAll() error {
+	for _, item := range []struct {
+		name string
+		dst  any
+	}{
+		{"users.json", &js.users},
+		{"devices.json", &js.devices},
+		{"tasks.json", &js.tasks},
+		{"task_results.json", &js.taskResults},
+		{"audit_logs.json", &js.auditLogs},
+		{"sessions.json", &js.sessions},
+		{"enrollment_codes.json", &js.enrollmentCodes},
+		{"device_credentials.json", &js.deviceCredentials},
+		{"templates.json", &js.templates},
+		{"llm_config.json", &js.llmConfig},
+	} {
+		if err := js.loadFile(item.name, item.dst); err != nil {
+			return err
+		}
+	}
 	// Ensure maps are non-nil after loading
 	if js.users == nil {
 		js.users = make(map[string]*jsonUser)
@@ -265,6 +283,7 @@ func (js *JSONStore) loadAll() {
 	if js.llmConfig == nil {
 		js.llmConfig = &jsonLLMConfig{ProviderType: "openai"}
 	}
+	return nil
 }
 
 // randomHex generates a hex-encoded random string of n bytes.
@@ -325,7 +344,7 @@ func (js *JSONStore) InitSecure(ctx context.Context, bootstrapPassword string) e
 	if err := js.seedCommandTemplatesLocked(); err != nil {
 		return err
 	}
-	if len(js.users) == 0 {
+	if !js.hasActiveAdminLocked() {
 		if len(bootstrapPassword) >= 12 {
 			return js.bootstrapAdminLocked(bootstrapPassword)
 		}
@@ -361,24 +380,53 @@ func (js *JSONStore) CountUsers(ctx context.Context) (int, error) {
 	return len(js.users), nil
 }
 
+func (js *JSONStore) SetupStatus(ctx context.Context) (SetupStatus, error) {
+	js.mu.RLock()
+	defer js.mu.RUnlock()
+	status := SetupStatus{TotalUsers: len(js.users)}
+	for _, rec := range js.users {
+		if rec == nil {
+			continue
+		}
+		if rec.Roles == RoleAdmin {
+			status.AdminExists = true
+			if rec.Status == "" || rec.Status == "active" {
+				status.ActiveAdminExists = true
+			}
+		}
+	}
+	status.Initialized = status.ActiveAdminExists
+	status.RegistrationAllowed = !status.ActiveAdminExists
+	status.RecoveryRequired = status.TotalUsers > 0 && !status.ActiveAdminExists
+	return status, nil
+}
+
 func (js *JSONStore) TryCreateInitialAdmin(ctx context.Context, username, displayName, password string) (User, error) {
+	return js.BootstrapFirstAdmin(ctx, BootstrapAdminInput{Username: username, DisplayName: displayName, Password: password, ConfirmPassword: password})
+}
+
+func (js *JSONStore) BootstrapFirstAdmin(ctx context.Context, input BootstrapAdminInput) (User, error) {
 	js.mu.Lock()
 	defer js.mu.Unlock()
-	if len(js.users) > 0 {
+	if js.hasActiveAdminLocked() {
 		return User{}, ErrAlreadyInitialized
 	}
-	hashed, err := bcrypt.GenerateFromPassword([]byte(password), 12)
+	if _, exists := js.users[input.Username]; exists {
+		return User{}, ErrUsernameExists
+	}
+	hashed, err := bcrypt.GenerateFromPassword([]byte(input.Password), 12)
 	if err != nil {
 		return User{}, err
 	}
 	now := nowString()
-	js.users[username] = &jsonUser{
-		ID:            "user_admin",
-		Username:      username,
-		DisplayName:   displayName,
+	id := newID("user")
+	js.users[input.Username] = &jsonUser{
+		ID:            id,
+		Username:      input.Username,
+		DisplayName:   input.DisplayName,
 		Password:      string(hashed),
 		Roles:         RoleAdmin,
-		MustChangePwd: 1,
+		MustChangePwd: 0,
 		Status:        "active",
 		CreatedAt:     now,
 		UpdatedAt:     now,
@@ -386,9 +434,21 @@ func (js *JSONStore) TryCreateInitialAdmin(ctx context.Context, username, displa
 	if err := js.saveFile("users.json", js.users); err != nil {
 		return User{}, err
 	}
-	user := User{ID: "user_admin", Username: username, DisplayName: displayName, Status: "active"}
+	user := User{ID: id, Username: input.Username, DisplayName: input.DisplayName, Status: "active"}
 	applyUserAuthorization(&user, RoleAdmin)
 	return user, nil
+}
+
+func (js *JSONStore) hasActiveAdminLocked() bool {
+	for _, rec := range js.users {
+		if rec == nil {
+			continue
+		}
+		if rec.Roles == RoleAdmin && (rec.Status == "" || rec.Status == "active") {
+			return true
+		}
+	}
+	return false
 }
 
 func (js *JSONStore) FindUser(ctx context.Context, username, password string) (User, bool, error) {

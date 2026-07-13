@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -21,9 +22,9 @@ import (
 type Driver string
 
 const (
-	DriverSQLite  Driver = "sqlite"
-	DriverMySQL   Driver = "mysql"
-	DriverJSON    Driver = "jsonfile"
+	DriverSQLite Driver = "sqlite"
+	DriverMySQL  Driver = "mysql"
+	DriverJSON   Driver = "jsonfile"
 )
 
 // DataStore is the persistence contract used by the application.
@@ -31,6 +32,7 @@ const (
 type DataStore interface {
 	// Users
 	CountUsers(ctx context.Context) (int, error)
+	SetupStatus(ctx context.Context) (SetupStatus, error)
 	FindUser(ctx context.Context, username, password string) (User, bool, error)
 	FindUserByUsername(ctx context.Context, username string) (User, bool, error)
 	AdminUser() User
@@ -40,6 +42,7 @@ type DataStore interface {
 	UpdateUserAccess(ctx context.Context, id, role, status string) error
 	ListUsers(ctx context.Context) ([]User, error)
 	TryCreateInitialAdmin(ctx context.Context, username, displayName, password string) (User, error)
+	BootstrapFirstAdmin(ctx context.Context, input BootstrapAdminInput) (User, error)
 
 	// Sessions
 	CreateWebSession(ctx context.Context, userID, remoteAddr, userAgent string) (string, string, error)
@@ -114,6 +117,7 @@ type Store struct {
 	db            *sql.DB
 	dialect       Dialect
 	encryptionKey []byte
+	bootstrapMu   sync.Mutex
 }
 
 func OpenStore(driver Driver, dsn string) (*Store, error) {
@@ -153,15 +157,16 @@ func (s *Store) InitSecure(ctx context.Context, bootstrapPassword string) error 
 	if err := s.initSchema(ctx); err != nil {
 		return err
 	}
-	var count int
-	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM users").Scan(&count); err != nil {
-		return fmt.Errorf("count users: %w", err)
+	status, err := s.SetupStatus(ctx)
+	if err != nil {
+		return err
 	}
-	if count == 0 {
+	if !status.ActiveAdminExists {
 		if len(bootstrapPassword) >= 12 {
 			return s.bootstrapAdmin(ctx, bootstrapPassword)
 		}
-		// No bootstrap password and empty database — setup API will handle first admin.
+		// No bootstrap password and no active administrator — setup API will
+		// handle first-admin creation or recovery.
 		return nil
 	}
 	if _, usesDefault, err := s.FindUser(ctx, "admin", "admin"); err != nil {
@@ -214,6 +219,7 @@ func (s *Store) bootstrapAdmin(ctx context.Context, password string) error {
 // ErrAlreadyInitialized is returned by TryCreateInitialAdmin when the system
 // already has one or more user accounts.
 var ErrAlreadyInitialized = errors.New("system is already initialized")
+var ErrUsernameExists = errors.New("username already exists")
 
 // CountUsers returns the number of user records in the database.
 func (s *Store) CountUsers(ctx context.Context) (int, error) {
@@ -222,34 +228,69 @@ func (s *Store) CountUsers(ctx context.Context) (int, error) {
 	return count, err
 }
 
+func (s *Store) SetupStatus(ctx context.Context) (SetupStatus, error) {
+	var status SetupStatus
+	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM users").Scan(&status.TotalUsers); err != nil {
+		return status, fmt.Errorf("count users: %w", err)
+	}
+	var adminCount int
+	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM users WHERE roles = ?", RoleAdmin).Scan(&adminCount); err != nil {
+		return status, fmt.Errorf("count admins: %w", err)
+	}
+	var activeAdminCount int
+	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM users WHERE roles = ? AND status = 'active'", RoleAdmin).Scan(&activeAdminCount); err != nil {
+		return status, fmt.Errorf("count active admins: %w", err)
+	}
+	status.AdminExists = adminCount > 0
+	status.ActiveAdminExists = activeAdminCount > 0
+	status.Initialized = status.ActiveAdminExists
+	status.RegistrationAllowed = !status.ActiveAdminExists
+	status.RecoveryRequired = status.TotalUsers > 0 && !status.ActiveAdminExists
+	return status, nil
+}
+
 // TryCreateInitialAdmin creates the first admin user atomically. If the users
 // table already contains rows, it returns ErrAlreadyInitialized. The method
 // uses a database transaction to prevent concurrent first-admin creation.
 func (s *Store) TryCreateInitialAdmin(ctx context.Context, username, displayName, password string) (User, error) {
+	return s.BootstrapFirstAdmin(ctx, BootstrapAdminInput{Username: username, DisplayName: displayName, Password: password, ConfirmPassword: password})
+}
+
+func (s *Store) BootstrapFirstAdmin(ctx context.Context, input BootstrapAdminInput) (User, error) {
+	s.bootstrapMu.Lock()
+	defer s.bootstrapMu.Unlock()
+
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return User{}, fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback()
 
-	var count int
-	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM users").Scan(&count); err != nil {
-		return User{}, fmt.Errorf("count users: %w", err)
+	var activeAdmins int
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM users WHERE roles = ? AND status = 'active'", RoleAdmin).Scan(&activeAdmins); err != nil {
+		return User{}, fmt.Errorf("count active admins: %w", err)
 	}
-	if count > 0 {
+	if activeAdmins > 0 {
 		return User{}, ErrAlreadyInitialized
 	}
+	var sameUsername int
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM users WHERE username = ?", input.Username).Scan(&sameUsername); err != nil {
+		return User{}, fmt.Errorf("count username: %w", err)
+	}
+	if sameUsername > 0 {
+		return User{}, ErrUsernameExists
+	}
 
-	hashed, err := bcrypt.GenerateFromPassword([]byte(password), 12)
+	hashed, err := bcrypt.GenerateFromPassword([]byte(input.Password), 12)
 	if err != nil {
 		return User{}, err
 	}
 	now := nowString()
-	id := "user_admin"
+	id := newID("user")
 	_, err = tx.ExecContext(ctx,
 		`INSERT INTO users (id, username, display_name, password, roles, must_change_password, status, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, 'admin', 1, 'active', ?, ?)`,
-		id, username, displayName, string(hashed), now, now)
+		 VALUES (?, ?, ?, ?, 'admin', 0, 'active', ?, ?)`,
+		id, input.Username, input.DisplayName, string(hashed), now, now)
 	if err != nil {
 		return User{}, fmt.Errorf("insert initial admin: %w", err)
 	}
@@ -258,7 +299,7 @@ func (s *Store) TryCreateInitialAdmin(ctx context.Context, username, displayName
 		return User{}, fmt.Errorf("commit: %w", err)
 	}
 
-	user := User{ID: id, Username: username, DisplayName: displayName, Status: "active"}
+	user := User{ID: id, Username: input.Username, DisplayName: input.DisplayName, Status: "active"}
 	applyUserAuthorization(&user, RoleAdmin)
 	return user, nil
 }

@@ -42,7 +42,12 @@ func isStateChanging(method string) bool {
 	return method == http.MethodPost || method == http.MethodPut || method == http.MethodPatch || method == http.MethodDelete
 }
 
-func isCSRFExempt(path string) bool { return path == "/api/auth/login" || path == "/api/agent/enroll" }
+func isCSRFExempt(path string) bool {
+	return path == "/api/auth/login" ||
+		path == "/api/agent/enroll" ||
+		path == "/api/v1/system/bootstrap" ||
+		path == "/api/setup/admin"
+}
 
 func requestID(ctx context.Context) string {
 	value, _ := ctx.Value(requestIDContextKey{}).(string)

@@ -714,27 +714,48 @@ func (a *App) handleSaveAutoMode(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
 }
 
-// handleSetupStatus returns whether the system requires first-time setup.
-func (a *App) handleSetupStatus(w http.ResponseWriter, r *http.Request) {
-	count, err := a.store.CountUsers(r.Context())
+func (a *App) handleSystemStatus(w http.ResponseWriter, r *http.Request) {
+	status, err := a.store.SetupStatus(r.Context())
 	if err != nil {
 		writeAPIError(w, http.StatusInternalServerError, "SETUP_CHECK_FAILED", "unable to check setup status")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]bool{"setupRequired": count == 0})
+	writeJSON(w, http.StatusOK, status)
+}
+
+// handleSetupStatus returns whether the system requires first-time setup.
+func (a *App) handleSetupStatus(w http.ResponseWriter, r *http.Request) {
+	status, err := a.store.SetupStatus(r.Context())
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "SETUP_CHECK_FAILED", "unable to check setup status")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"setupRequired": status.RegistrationAllowed})
+}
+
+func (a *App) handleSystemBootstrap(w http.ResponseWriter, r *http.Request) {
+	var req BootstrapAdminInput
+	if !readJSON(w, r, &req) {
+		return
+	}
+	a.createBootstrapAdmin(w, r, req, false)
 }
 
 // handleSetupAdmin creates the first admin user when the system is uninitialized.
 func (a *App) handleSetupAdmin(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Username        string `json:"username"`
-		Password        string `json:"password"`
-		ConfirmPassword string `json:"confirmPassword"`
-	}
+	var req BootstrapAdminInput
 	if !readJSON(w, r, &req) {
 		return
 	}
+	a.createBootstrapAdmin(w, r, req, true)
+}
+
+func (a *App) createBootstrapAdmin(w http.ResponseWriter, r *http.Request, req BootstrapAdminInput, autoLogin bool) {
 	req.Username = strings.TrimSpace(strings.ToLower(req.Username))
+	req.DisplayName = strings.TrimSpace(req.DisplayName)
+	if req.DisplayName == "" {
+		req.DisplayName = req.Username
+	}
 	if !usernamePattern.MatchString(req.Username) {
 		writeAPIError(w, http.StatusBadRequest, "USERNAME_INVALID", "username must be 3-64 lowercase alphanumeric characters")
 		return
@@ -748,27 +769,31 @@ func (a *App) handleSetupAdmin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := a.store.TryCreateInitialAdmin(r.Context(), req.Username, req.Username, req.Password)
+	user, err := a.store.BootstrapFirstAdmin(r.Context(), req)
 	if errors.Is(err, ErrAlreadyInitialized) {
-		writeAPIError(w, http.StatusConflict, "ALREADY_INITIALIZED", "system is already initialized")
+		writeAPIError(w, http.StatusConflict, "BOOTSTRAP_CLOSED", "an active administrator already exists")
+		return
+	}
+	if errors.Is(err, ErrUsernameExists) {
+		writeAPIError(w, http.StatusConflict, "USERNAME_EXISTS", "username already exists")
 		return
 	}
 	if err != nil {
-		writeAPIError(w, http.StatusInternalServerError, "SETUP_FAILED", err.Error())
+		writeAPIError(w, http.StatusInternalServerError, "SETUP_FAILED", "unable to create administrator")
 		return
 	}
-
-	// Auto-login: create a session and set cookies so the user is logged in
-	sessionToken, csrfToken, err := a.store.CreateWebSession(r.Context(), user.ID, clientIP(r), r.UserAgent())
-	if err != nil {
-		writeAPIError(w, http.StatusInternalServerError, "SESSION_FAILED", "admin created but auto-login failed")
-		return
+	if autoLogin {
+		sessionToken, csrfToken, err := a.store.CreateWebSession(r.Context(), user.ID, clientIP(r), r.UserAgent())
+		if err != nil {
+			writeAPIError(w, http.StatusInternalServerError, "SESSION_FAILED", "admin created but auto-login failed")
+			return
+		}
+		setAuthCookies(w, sessionToken, csrfToken, a.config.SecureCookies)
 	}
-	setAuthCookies(w, sessionToken, csrfToken, a.config.SecureCookies)
 
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"user":               user,
-		"mustChangePassword": true,
+		"mustChangePassword": false,
 	})
 }
 

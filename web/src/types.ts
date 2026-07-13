@@ -8,6 +8,15 @@ export interface User {
   status: 'active' | 'disabled';
 }
 
+export interface SystemStatus {
+  initialized: boolean;
+  adminExists: boolean;
+  activeAdminExists: boolean;
+  registrationAllowed: boolean;
+  recoveryRequired: boolean;
+  totalUsers: number;
+}
+
 export interface Device {
   id: string;
   name: string;
