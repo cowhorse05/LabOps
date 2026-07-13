@@ -142,9 +142,18 @@ export default function LoginPage() {
               style={{ marginBottom: 18 }}
               message={setupStatusMessage(status)}
             />
-            <Button type="primary" block size="large" onClick={() => navigate('/setup')}>
-              创建首个管理员
+            <Button
+              type="primary"
+              block
+              size="large"
+              onClick={() => navigate('/setup')}
+              data-testid="create-admin-entry"
+            >
+              首次使用？创建管理员账号
             </Button>
+            <Typography.Text type="secondary" style={{ display: 'block', textAlign: 'center', marginTop: 12 }}>
+              创建完成后即可用该账号登录 LabOps。
+            </Typography.Text>
           </>
         ) : (
           <Form onFinish={handleLogin} className="login-form" size="large">

@@ -70,10 +70,10 @@ export default function SetupPage() {
       <div className="login-panel">
         <div className="login-mark">L</div>
         <Typography.Title level={3} style={{ textAlign: 'center' }}>
-          创建首个管理员
+          注册管理员账号
         </Typography.Title>
         <Typography.Text type="secondary" style={{ display: 'block', textAlign: 'center', marginBottom: 18 }}>
-          首个管理员创建完成后，普通用户只能由管理员在系统内部创建。
+          首次部署时创建第一个可登录管理员账号，用于管理和控制远程设备。
         </Typography.Text>
         {status?.recoveryRequired ? (
           <Alert
@@ -120,8 +120,15 @@ export default function SetupPage() {
             <Input.Password prefix={<LockOutlined />} placeholder="Confirm password" />
           </Form.Item>
           <Form.Item>
-            <Button type="primary" htmlType="submit" block loading={submitting} disabled={submitting}>
-              创建首个管理员
+            <Button
+              type="primary"
+              htmlType="submit"
+              block
+              loading={submitting}
+              disabled={submitting}
+              data-testid="submit-admin-registration"
+            >
+              创建管理员账号
             </Button>
           </Form.Item>
           <Form.Item style={{ marginBottom: 0 }}>
