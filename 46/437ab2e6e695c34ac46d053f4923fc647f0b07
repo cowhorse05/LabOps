@@ -1,0 +1,24 @@
+server/internal/core/agent.go
+  s_49a55cab281c99::t_7e05a5eb4082cf 77
+server/internal/core/requestlog.go
+  s_49a55cab281c99::t_72eac187dc884f 4-5,7
+  s_49a55cab281c99::t_9a6346a378ead2 29-36
+server/internal/core/app.go
+  s_49a55cab281c99::t_6770b6a2f2ec56 95-102
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.33-trip",
+  "base_commit_sha": "46437ab2e6e695c34ac46d053f4923fc647f0b07",
+  "prompts": {},
+  "sessions": {
+    "s_49a55cab281c99": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d24064-a8ab-4d23-b119-1f09c3534cf6",
+        "model": "deepseek-v4-pro"
+      },
+      "human_author": "cowhorse05 <yli257812@gmail.com>"
+    }
+  }
+}
