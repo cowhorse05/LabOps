@@ -1,0 +1,19 @@
+.github/workflows/release.yml
+  s_698b4574d4003e::t_48e4648fae0a39 18,22,30,34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.33-trip",
+  "base_commit_sha": "2674df3a3b3b1d8450688dc6234c97b2d6d52a94",
+  "prompts": {},
+  "sessions": {
+    "s_698b4574d4003e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f771b9f8-42eb-4b4f-b120-9a8f8b7061b9",
+        "model": "deepseek-v4-pro"
+      },
+      "human_author": "cowhorse05 <yli257812@gmail.com>"
+    }
+  }
+}
