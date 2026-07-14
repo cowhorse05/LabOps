@@ -296,8 +296,11 @@ func (a *App) handleCreateDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	actor := currentUser(r.Context())
 	_ = a.store.CreateAudit(r.Context(), AuditLog{
-		Actor:    "admin",
+		Actor:    actor.Username,
+		ActorID:  actor.ID,
+		ActorRole: actor.Role,
 		Action:   "device.create",
 		DeviceID: id,
 		Status:   StatusSuccess,
@@ -324,8 +327,11 @@ func (a *App) handleDeleteDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	actor := currentUser(r.Context())
 	_ = a.store.CreateAudit(r.Context(), AuditLog{
-		Actor:    "admin",
+		Actor:    actor.Username,
+		ActorID:  actor.ID,
+		ActorRole: actor.Role,
 		Action:   "device.delete",
 		DeviceID: id,
 		Status:   StatusSuccess,
@@ -597,6 +603,7 @@ func (a *App) handleSaveLLMConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	// Trigger immediate re-analysis with the new config
 	go a.analyzer.TriggerRun()
+	a.audit(r, currentUser(r.Context()), "llm.config_update", "success", fmt.Sprintf("LLM config updated: enabled=%v provider=%s", req.Enabled, req.ProviderURL))
 	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
 }
 

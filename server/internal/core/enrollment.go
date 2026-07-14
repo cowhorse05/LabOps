@@ -179,6 +179,7 @@ func (a *App) handleCreateEnrollmentCode(w http.ResponseWriter, r *http.Request)
 		writeAPIError(w, http.StatusBadRequest, "ENROLLMENT_CREATE_FAILED", err.Error())
 		return
 	}
+	a.audit(r, currentUser(r.Context()), "enrollment.create", "success", fmt.Sprintf("created enrollment code %s", item.ID))
 	writeJSON(w, http.StatusCreated, item)
 }
 
@@ -187,6 +188,7 @@ func (a *App) handleRevokeEnrollmentCode(w http.ResponseWriter, r *http.Request)
 		writeAPIError(w, http.StatusNotFound, "ENROLLMENT_NOT_FOUND", "enrollment code not found")
 		return
 	}
+	a.audit(r, currentUser(r.Context()), "enrollment.revoke", "success", "revoked enrollment code "+r.PathValue("id"))
 	w.WriteHeader(http.StatusNoContent)
 }
 
