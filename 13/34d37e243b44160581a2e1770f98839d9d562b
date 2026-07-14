@@ -1,0 +1,23 @@
+web/src/pages/LoginPage.tsx
+  s_698b4574d4003e::t_ff5db45401bd35 3,23-27,71-86,146-149,183-205,208-276
+web/src/api/labops.ts
+  s_698b4574d4003e::t_314a724aaf1f03 28-31
+agent/cmd/agent/main.go
+  s_698b4574d4003e::t_4a95954fc437cd 346-348
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.33-trip",
+  "base_commit_sha": "1334d37e243b44160581a2e1770f98839d9d562b",
+  "prompts": {},
+  "sessions": {
+    "s_698b4574d4003e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f771b9f8-42eb-4b4f-b120-9a8f8b7061b9",
+        "model": "deepseek-v4-pro"
+      },
+      "human_author": "cowhorse05 <yli257812@gmail.com>"
+    }
+  }
+}
