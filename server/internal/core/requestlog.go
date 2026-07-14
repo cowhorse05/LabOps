@@ -1,7 +1,10 @@
 package core
 
 import (
+	"bufio"
+	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 )
@@ -21,6 +24,14 @@ func (rw *responseWriter) WriteHeader(code int) {
 // Unwrap preserves optional http.ResponseWriter interfaces (Flusher, Hijacker, Pusher).
 func (rw *responseWriter) Unwrap() http.ResponseWriter {
 	return rw.ResponseWriter
+}
+
+// Hijack implements http.Hijacker by delegating to the underlying ResponseWriter.
+func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if hj, ok := rw.ResponseWriter.(http.Hijacker); ok {
+		return hj.Hijack()
+	}
+	return nil, nil, fmt.Errorf("underlying ResponseWriter does not implement http.Hijacker")
 }
 
 // withRequestLogging returns middleware that logs every HTTP request using slog.

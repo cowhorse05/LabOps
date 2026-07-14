@@ -74,6 +74,7 @@ func (a *App) handleAgentWS(w http.ResponseWriter, r *http.Request) {
 
 	conn, err := a.upgrader.Upgrade(w, r, nil)
 	if err != nil {
+		a.logger.Error("websocket upgrade failed", "error", err)
 		return
 	}
 	defer conn.Close()

@@ -92,7 +92,14 @@ func NewApp(store DataStore, config Config, logger *slog.Logger) *App {
 					return config.Environment == ""
 				}
 				origin := r.Header.Get("Origin")
-				return origin == "" || config.PublicOrigin == "" || origin == config.PublicOrigin
+				if origin == "" || config.PublicOrigin == "" || origin == config.PublicOrigin {
+					return true
+				}
+				// Allow agents on the same machine to connect via loopback.
+				if strings.HasPrefix(origin, "http://localhost") || strings.HasPrefix(origin, "http://127.0.0.1") {
+					return true
+				}
+				return false
 			},
 		},
 	}
