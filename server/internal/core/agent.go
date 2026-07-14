@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -150,30 +149,30 @@ func (a *App) handleAgentWS(w http.ResponseWriter, r *http.Request) {
 			var hb HeartbeatPayload
 			if err := json.Unmarshal(msg.Payload, &hb); err == nil {
 				if err := a.store.UpdateHeartbeat(context.Background(), device.ID, hb); err != nil {
-					log.Printf("failed to update heartbeat for device %s: %v", device.ID, err)
+					a.logger.Error("failed to update heartbeat", "device_id", device.ID, "error", err)
 				}
 			}
 		case "task_result":
 			var result TaskResultPayload
 			if err := json.Unmarshal(msg.Payload, &result); err != nil {
-				log.Printf("failed to unmarshal task_result: %v", err)
+				a.logger.Error("failed to unmarshal task_result", "error", err)
 				break
 			}
 			task, found, err := a.store.GetTask(context.Background(), result.TaskID)
 			if err != nil {
-				log.Printf("failed to get task %s: %v", result.TaskID, err)
+				a.logger.Error("failed to get task", "task_id", result.TaskID, "error", err)
 				break
 			}
 			if !found {
-				log.Printf("task %s not found", result.TaskID)
+				a.logger.Warn("task not found", "task_id", result.TaskID)
 				break
 			}
 			if task.DeviceID != device.ID {
-				log.Printf("task %s does not belong to device %s (expected %s)", result.TaskID, device.ID, task.DeviceID)
+				a.logger.Warn("task device mismatch", "task_id", result.TaskID, "actual_device", device.ID, "expected_device", task.DeviceID)
 				break
 			}
 			if err := a.store.CompleteTask(context.Background(), result); err != nil {
-				log.Printf("failed to complete task %s: %v", result.TaskID, err)
+				a.logger.Error("failed to complete task", "task_id", result.TaskID, "error", err)
 			}
 			status := result.Status
 			if status == "" {
@@ -190,7 +189,7 @@ func (a *App) handleAgentWS(w http.ResponseWriter, r *http.Request) {
 				Status:   status,
 				Message:  fmt.Sprintf("exit_code=%d duration_ms=%d", result.ExitCode, result.DurationMS),
 			}); err != nil {
-				log.Printf("failed to create audit for task %s: %v", result.TaskID, err)
+				a.logger.Error("failed to create audit for task", "task_id", result.TaskID, "error", err)
 			}
 		}
 	}
@@ -214,10 +213,10 @@ func (a *App) unregisterClient(client *AgentClient) {
 	}
 	a.mu.Unlock()
 	if err := a.store.CloseSession(context.Background(), client.sessionID); err != nil {
-		log.Printf("error closing session %d for device %s: %v", client.sessionID, client.deviceID, err)
+		a.logger.Error("error closing session", "session_id", client.sessionID, "device_id", client.deviceID, "error", err)
 	}
 	if err := a.store.MarkDeviceOffline(context.Background(), client.deviceID); err != nil {
-		log.Printf("error marking device %s offline: %v", client.deviceID, err)
+		a.logger.Error("error marking device offline", "device_id", client.deviceID, "error", err)
 	}
 	if err := a.store.CreateAudit(context.Background(), AuditLog{
 		Actor:    "agent",
@@ -226,7 +225,7 @@ func (a *App) unregisterClient(client *AgentClient) {
 		Status:   StatusOffline,
 		Message:  "agent connection closed",
 	}); err != nil {
-		log.Printf("error creating audit for device %s disconnect: %v", client.deviceID, err)
+		a.logger.Error("error creating audit for disconnect", "device_id", client.deviceID, "error", err)
 	}
 }
 
@@ -287,7 +286,7 @@ func (a *App) dispatchPendingTasks(ctx context.Context, deviceID string) error {
 	}
 	for _, task := range tasks {
 		if err := a.dispatchTask(ctx, task); err != nil {
-			log.Printf("failed to dispatch pending task %s: %v", task.ID, err)
+			a.logger.Error("failed to dispatch pending task", "task_id", task.ID, "error", err)
 		}
 	}
 	return nil
