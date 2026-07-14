@@ -1,0 +1,40 @@
+.github/workflows/release.yml
+  s_698b4574d4003e::t_dc75eaa3eaa5d7 1-11,13-17,20,28,31,38-39,41-44,46
+  s_698b4574d4003e::t_a3ba868de80f13 12,18-19,21-27,29-30,32-37,40,45
+web/src/utils/logger.ts
+  s_698b4574d4003e::t_f733d22aad70e9 1-39
+web/src/pages/DevicesPage.tsx
+  s_698b4574d4003e::t_8348e1fe38850d 218-238
+  s_698b4574d4003e::t_5822ba760da783 2
+  s_698b4574d4003e::t_09895defa80379 3,10,19-21,42-43,73,75-77,83-84,86-88,91,95-100,114-116,191,193-201,206-217,239-326
+web/src/layouts/AppLayout.tsx
+  s_698b4574d4003e::t_58d1842f09d6f6 7
+  s_698b4574d4003e::t_4beb5e3de57ec2 32
+web/src/router.tsx
+  s_698b4574d4003e::t_bca54c8bc0e81c 64
+  s_698b4574d4003e::t_5e538f83058cf7 17
+web/src/pages/LogsPage.tsx
+  s_698b4574d4003e::t_678c21264fefa7 1-157
+web/src/stores/logStore.ts
+  s_698b4574d4003e::t_976f83c29181c5 1-40
+web/src/components/ErrorBoundary.tsx
+  s_698b4574d4003e::t_2933110d2ce4d6 23-30,32
+  s_698b4574d4003e::t_d8878496cf91b9 31
+  s_698b4574d4003e::t_c7bb43dc2de81a 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.33-trip",
+  "base_commit_sha": "d5a31c1b601748a7e10f695b908bfd58d7699edf",
+  "prompts": {},
+  "sessions": {
+    "s_698b4574d4003e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f771b9f8-42eb-4b4f-b120-9a8f8b7061b9",
+        "model": "deepseek-v4-pro"
+      },
+      "human_author": "cowhorse05 <yli257812@gmail.com>"
+    }
+  }
+}
