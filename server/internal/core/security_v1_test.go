@@ -22,7 +22,7 @@ func secureTestApp(t *testing.T) (*Store, *App, http.Handler) {
 	if err := store.UpdatePassword(context.Background(), "admin", "secure-test-password"); err != nil {
 		t.Fatal(err)
 	}
-	app := NewApp(store, Config{Environment: "production", PublicOrigin: "https://labops.test"})
+	app := NewApp(store, Config{Environment: "production", PublicOrigin: "https://labops.test"}, nil)
 	t.Cleanup(func() { app.Stop(); store.Close() })
 	return store, app, app.Handler()
 }

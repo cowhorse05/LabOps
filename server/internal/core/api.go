@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -60,13 +61,18 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	user, ok, err := a.store.FindUser(r.Context(), req.Username, req.Password)
 	if err != nil {
+		a.auditAuth(r, req.Username, "", "auth.login", "failure", err.Error())
 		writeAPIError(w, http.StatusInternalServerError, "LOGIN_FAILED", "unable to complete login")
 		return
 	}
 	if !ok {
+		a.auditAuth(r, req.Username, "", "auth.login", "failure", "invalid username or password")
 		writeError(w, http.StatusUnauthorized, "invalid username or password")
 		return
 	}
+
+	// Rotate sessions on login to prevent session fixation (OWASP).
+	_ = a.store.DeleteUserSessions(r.Context(), user.ID)
 
 	sessionToken, csrfToken, err := a.store.CreateWebSession(r.Context(), user.ID, clientIP(r), r.UserAgent())
 	if err != nil {
@@ -78,6 +84,7 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// Check if must change password (from DB)
 	mustChange := a.store.MustChangePassword(r.Context(), user.Username)
 
+	a.auditAuth(r, user.Username, user.ID, "auth.login", "success", "login from "+clientIP(r))
 	writeJSON(w, http.StatusOK, loginResponse{
 		User:               user,
 		MustChangePassword: mustChange,
@@ -117,26 +124,20 @@ func (a *App) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !ok {
+		a.audit(r, user, "auth.password_change", "failure", "old password incorrect")
 		writeError(w, http.StatusUnauthorized, "old password is incorrect")
 		return
 	}
 
-	// Update password
-	if err := a.store.UpdatePassword(r.Context(), username, req.NewPassword); err != nil {
+	// Atomically update password, delete old sessions, and create a new session.
+	sessionToken, csrfToken, err := a.store.ChangePassword(r.Context(), username, req.NewPassword, user.ID)
+	if err != nil {
+		a.audit(r, user, "auth.password_change", "failure", err.Error())
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-
-	if err := a.store.DeleteUserSessions(r.Context(), user.ID); err != nil {
-		writeAPIError(w, http.StatusInternalServerError, "SESSION_REVOKE_FAILED", "password changed but sessions could not be revoked")
-		return
-	}
-	sessionToken, csrfToken, err := a.store.CreateWebSession(r.Context(), user.ID, clientIP(r), r.UserAgent())
-	if err != nil {
-		writeAPIError(w, http.StatusInternalServerError, "SESSION_CREATE_FAILED", "password changed; please log in again")
-		return
-	}
 	setAuthCookies(w, sessionToken, csrfToken, a.config.SecureCookies)
+	a.audit(r, user, "auth.password_change", "success", "password changed")
 	writeJSON(w, http.StatusOK, map[string]string{"status": "password_changed"})
 }
 
@@ -145,6 +146,7 @@ func (a *App) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if auth.SessionID != "" {
 		_ = a.store.DeleteWebSession(r.Context(), auth.SessionID)
 	}
+	a.audit(r, auth.User, "auth.logout", "success", "logout")
 	clearAuthCookies(w, a.config.SecureCookies)
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -177,6 +179,7 @@ func (a *App) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusBadRequest, "USER_CREATE_FAILED", err.Error())
 		return
 	}
+	a.audit(r, currentUser(r.Context()), "user.create", "success", "created user "+user.Username+" with role "+req.Role)
 	writeJSON(w, http.StatusCreated, user)
 }
 
@@ -194,6 +197,7 @@ func (a *App) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusBadRequest, "USER_UPDATE_FAILED", err.Error())
 		return
 	}
+	a.audit(r, current, "user.update", "success", fmt.Sprintf("updated user %s role=%s status=%s", r.PathValue("id"), req.Role, req.Status))
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -501,12 +505,26 @@ func (a *App) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) handleAuditLogs(w http.ResponseWriter, r *http.Request) {
 	a.refreshState(r.Context())
-	logs, err := a.store.ListAudit(r.Context())
+	q := r.URL.Query()
+	filter := AuditFilter{
+		Action:   q.Get("action"),
+		Actor:    q.Get("actor"),
+		DeviceID: q.Get("deviceId"),
+		Status:   q.Get("status"),
+		From:     q.Get("from"),
+		To:       q.Get("to"),
+		Limit:    parseIntParam(q.Get("limit"), 200),
+		Offset:   parseIntParam(q.Get("offset"), 0),
+	}
+	logs, err := a.store.ListAudit(r.Context(), filter)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, logs)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"logs":   logs,
+		"filter": filter,
+	})
 }
 
 func (a *App) handleAiOpsReport(w http.ResponseWriter, r *http.Request) {
@@ -720,6 +738,9 @@ func (a *App) handleSystemStatus(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusInternalServerError, "SETUP_CHECK_FAILED", "unable to check setup status")
 		return
 	}
+	if a.config.OpenRegistration {
+		status.RegistrationAllowed = true
+	}
 	writeJSON(w, http.StatusOK, status)
 }
 
@@ -730,7 +751,62 @@ func (a *App) handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusInternalServerError, "SETUP_CHECK_FAILED", "unable to check setup status")
 		return
 	}
+	if a.config.OpenRegistration {
+		status.RegistrationAllowed = true
+	}
 	writeJSON(w, http.StatusOK, map[string]bool{"setupRequired": status.RegistrationAllowed})
+}
+
+// handleSelfRegister allows anyone to create a viewer account when open registration is enabled.
+func (a *App) handleSelfRegister(w http.ResponseWriter, r *http.Request) {
+	if !a.config.OpenRegistration {
+		writeAPIError(w, http.StatusForbidden, "REGISTRATION_CLOSED", "self-registration is not enabled")
+		return
+	}
+	var req struct {
+		Username, DisplayName, Password, ConfirmPassword string
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	req.Username = normalizeUsername(req.Username)
+	req.DisplayName = strings.TrimSpace(req.DisplayName)
+	if req.DisplayName == "" {
+		req.DisplayName = req.Username
+	}
+	if !usernamePattern.MatchString(req.Username) {
+		writeAPIError(w, http.StatusBadRequest, "USERNAME_INVALID", "username must be 3-64 lowercase alphanumeric characters")
+		return
+	}
+	if len(req.Password) < 12 {
+		writeAPIError(w, http.StatusBadRequest, "PASSWORD_TOO_SHORT", "password must be at least 12 characters")
+		return
+	}
+	if req.Password != req.ConfirmPassword {
+		writeAPIError(w, http.StatusBadRequest, "PASSWORD_MISMATCH", "passwords do not match")
+		return
+	}
+
+	user, err := a.store.CreateUser(r.Context(), req.Username, req.DisplayName, req.Password, RoleOperator)
+	if err != nil {
+		writeAPIError(w, http.StatusConflict, "REGISTER_FAILED", err.Error())
+		return
+	}
+
+	sessionToken, csrfToken, err := a.store.CreateWebSession(r.Context(), user.ID, clientIP(r), r.UserAgent())
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "SESSION_FAILED", "account created but auto-login failed")
+		return
+	}
+	setAuthCookies(w, sessionToken, csrfToken, a.config.SecureCookies)
+
+	// Read the real must_change_password flag from DB instead of hardcoding false.
+	mustChange := a.store.MustChangePassword(r.Context(), user.Username)
+	a.audit(r, user, "user.register", "success", "self-registered from "+clientIP(r))
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"user":               user,
+		"mustChangePassword": mustChange,
+	})
 }
 
 func (a *App) handleSystemBootstrap(w http.ResponseWriter, r *http.Request) {
@@ -830,6 +906,17 @@ func writeAPIError(w http.ResponseWriter, status int, code, message string) {
 	})
 }
 
+func parseIntParam(raw string, fallback int) int {
+	if raw == "" {
+		return fallback
+	}
+	val, err := strconv.Atoi(raw)
+	if err != nil || val < 0 {
+		return fallback
+	}
+	return val
+}
+
 func clientIP(r *http.Request) string {
 	value := r.Header.Get("X-Forwarded-For")
 	if idx := strings.Index(value, ","); idx >= 0 {
@@ -851,4 +938,31 @@ func auditMessage(command string) string {
 		return command
 	}
 	return fmt.Sprintf("%s...", command[:117])
+}
+
+// audit records an audit log entry with full user context from the authenticated user.
+func (a *App) audit(r *http.Request, user User, action, status, message string) {
+	a.store.CreateAudit(r.Context(), AuditLog{
+		Actor:      user.Username,
+		ActorID:    user.ID,
+		ActorRole:  user.Role,
+		RemoteAddr: clientIP(r),
+		RequestID:  requestID(r.Context()),
+		Action:     action,
+		Status:     status,
+		Message:    message,
+	})
+}
+
+// auditAuth records an audit log entry using a username string (for pre-auth events like login failures).
+func (a *App) auditAuth(r *http.Request, username, actorID, action, status, message string) {
+	a.store.CreateAudit(r.Context(), AuditLog{
+		Actor:      username,
+		ActorID:    actorID,
+		RemoteAddr: clientIP(r),
+		RequestID:  requestID(r.Context()),
+		Action:     action,
+		Status:     status,
+		Message:    message,
+	})
 }

@@ -38,6 +38,7 @@ type DataStore interface {
 	AdminUser() User
 	CreateUser(ctx context.Context, username, displayName, password, role string) (User, error)
 	UpdatePassword(ctx context.Context, username, newPassword string) error
+	ChangePassword(ctx context.Context, username, newPassword, userID string) (string, string, error)
 	MustChangePassword(ctx context.Context, username string) bool
 	UpdateUserAccess(ctx context.Context, id, role, status string) error
 	ListUsers(ctx context.Context) ([]User, error)
@@ -82,7 +83,7 @@ type DataStore interface {
 
 	// Audit
 	CreateAudit(ctx context.Context, audit AuditLog) error
-	ListAudit(ctx context.Context) ([]AuditLog, error)
+	ListAudit(ctx context.Context, filter AuditFilter) ([]AuditLog, error)
 
 	// LLM Config
 	GetLLMConfig(ctx context.Context) (LLMConfig, error)
@@ -349,6 +350,63 @@ func (s *Store) AdminUser() User {
 
 func (s *Store) UpdatePassword(ctx context.Context, username, newPassword string) error {
 	return s.setPassword(ctx, username, newPassword, false)
+}
+
+// ChangePassword updates the user's password and replaces all sessions atomically.
+// It runs in a single transaction: update password → delete old sessions → create new session.
+// Returns the new session token and CSRF token for immediate use by the caller.
+func (s *Store) ChangePassword(ctx context.Context, username, newPassword, userID string) (string, string, error) {
+	hashed, err := bcrypt.GenerateFromPassword([]byte(newPassword), 12)
+	if err != nil {
+		return "", "", err
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", "", err
+	}
+	defer tx.Rollback()
+
+	// Step 1: Update password, clear must_change_password flag.
+	now := nowString()
+	_, err = tx.ExecContext(ctx,
+		"UPDATE users SET password = ?, must_change_password = 0, updated_at = ? WHERE username = ?",
+		string(hashed), now, username)
+	if err != nil {
+		return "", "", fmt.Errorf("change password: update: %w", err)
+	}
+
+	// Step 2: Delete all existing sessions for this user.
+	_, err = tx.ExecContext(ctx, "DELETE FROM web_sessions WHERE user_id = ?", userID)
+	if err != nil {
+		return "", "", fmt.Errorf("change password: delete sessions: %w", err)
+	}
+
+	// Step 3: Create a new session within the transaction.
+	token, err := randomToken(32)
+	if err != nil {
+		return "", "", err
+	}
+	csrf, err := randomToken(32)
+	if err != nil {
+		return "", "", err
+	}
+	sessionID := newID("session")
+	t := time.Now().UTC()
+	_, err = tx.ExecContext(ctx, `INSERT INTO web_sessions
+		(id, user_id, token_hash, csrf_hash, remote_addr, user_agent, created_at, last_seen_at, idle_expires_at, absolute_expires_at)
+		VALUES (?, ?, ?, ?, '', '', ?, ?, ?, ?)`,
+		sessionID, userID, tokenHash(token), tokenHash(csrf),
+		t.Format(time.RFC3339), t.Format(time.RFC3339),
+		t.Add(8*time.Hour).Format(time.RFC3339), t.Add(24*time.Hour).Format(time.RFC3339))
+	if err != nil {
+		return "", "", fmt.Errorf("change password: create session: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return "", "", fmt.Errorf("change password: commit: %w", err)
+	}
+	return token, csrf, nil
 }
 
 func (s *Store) setPassword(ctx context.Context, username, newPassword string, mustChange bool) error {
@@ -800,12 +858,49 @@ func (s *Store) CreateAudit(ctx context.Context, audit AuditLog) error {
 	return err
 }
 
-func (s *Store) ListAudit(ctx context.Context) ([]AuditLog, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT a.id, a.actor, a.actor_id, a.actor_role, a.remote_addr, a.request_id, a.action, COALESCE(a.device_id, ''), COALESCE(d.name, ''), COALESCE(a.task_id, ''),
+func (s *Store) ListAudit(ctx context.Context, filter AuditFilter) ([]AuditLog, error) {
+	where := []string{"1=1"}
+	args := []any{}
+
+	if filter.Action != "" {
+		where = append(where, "a.action = ?")
+		args = append(args, filter.Action)
+	}
+	if filter.Actor != "" {
+		where = append(where, "a.actor = ?")
+		args = append(args, filter.Actor)
+	}
+	if filter.DeviceID != "" {
+		where = append(where, "a.device_id = ?")
+		args = append(args, filter.DeviceID)
+	}
+	if filter.Status != "" {
+		where = append(where, "a.status = ?")
+		args = append(args, filter.Status)
+	}
+	if filter.From != "" {
+		where = append(where, "a.created_at >= ?")
+		args = append(args, filter.From)
+	}
+	if filter.To != "" {
+		where = append(where, "a.created_at <= ?")
+		args = append(args, filter.To)
+	}
+
+	limit := filter.Limit
+	if limit <= 0 || limit > 500 {
+		limit = 200
+	}
+
+	query := fmt.Sprintf(`SELECT a.id, a.actor, a.actor_id, a.actor_role, a.remote_addr, a.request_id, a.action, COALESCE(a.device_id, ''), COALESCE(d.name, ''), COALESCE(a.task_id, ''),
 		a.status, a.message, a.created_at
 		FROM audit_logs a
 		LEFT JOIN devices d ON d.id = a.device_id
-		ORDER BY a.created_at DESC LIMIT 200`)
+		WHERE %s
+		ORDER BY a.created_at DESC LIMIT ? OFFSET ?`, strings.Join(where, " AND "))
+	args = append(args, limit, filter.Offset)
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

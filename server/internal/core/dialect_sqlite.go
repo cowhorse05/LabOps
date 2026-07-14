@@ -20,16 +20,24 @@ func (d *sqliteDialect) PreConnect(dsn string) error {
 }
 
 func (d *sqliteDialect) ConfigurePool(db *sql.DB, dsn string) {
-	maxOpen := 1
-	if dsn != ":memory:" {
-		maxOpen = 4
-	}
-	db.SetMaxOpenConns(maxOpen)
+	// WAL mode requires a single writer; concurrent readers are safe.
+	// Reference: Gitea, Grafana, Caddy all use MaxOpenConns=1 with SQLite WAL.
+	db.SetMaxOpenConns(1)
 }
 
 func (d *sqliteDialect) Validate(db *sql.DB) error {
-	_, err := db.Exec("PRAGMA busy_timeout = 5000")
-	return err
+	pragmas := []string{
+		"PRAGMA journal_mode=WAL",
+		"PRAGMA busy_timeout=5000",
+		"PRAGMA foreign_keys=ON",
+		"PRAGMA synchronous=NORMAL",
+	}
+	for _, p := range pragmas {
+		if _, err := db.Exec(p); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (d *sqliteDialect) TypeMap() TypeMap {

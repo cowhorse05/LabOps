@@ -99,7 +99,7 @@ func TestStoreDeviceTaskAuditFlow(t *testing.T) {
 	if err := store.CreateAudit(ctx, AuditLog{Actor: "admin", Action: "command.complete", DeviceID: device.ID, TaskID: task.ID, Status: StatusSuccess, Message: "ok"}); err != nil {
 		t.Fatalf("create audit: %v", err)
 	}
-	logs, err := store.ListAudit(ctx)
+	logs, err := store.ListAudit(ctx, AuditFilter{})
 	if err != nil {
 		t.Fatalf("list audit: %v", err)
 	}

@@ -125,6 +125,19 @@ type AuditLog struct {
 	CreatedAt  string `json:"createdAt"`
 }
 
+// AuditFilter supports querying audit logs with optional filters.
+// Zero values mean "no filter" (match all).
+type AuditFilter struct {
+	Action   string
+	Actor    string
+	DeviceID string
+	Status   string
+	From     string // RFC3339 start time (inclusive)
+	To       string // RFC3339 end time (inclusive)
+	Limit    int
+	Offset   int
+}
+
 type AgentEnvelope struct {
 	Type    string `json:"type"`
 	Payload any    `json:"payload"`

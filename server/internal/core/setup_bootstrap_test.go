@@ -20,7 +20,7 @@ func TestSystemBootstrapSQLiteLifecycle(t *testing.T) {
 	if err := store.InitSecure(context.Background(), ""); err != nil {
 		t.Fatal(err)
 	}
-	app := NewApp(store, Config{Environment: "production", PublicOrigin: "https://labops.test"})
+	app := NewApp(store, Config{Environment: "production", PublicOrigin: "https://labops.test"}, nil)
 	t.Cleanup(func() { app.Stop(); store.Close() })
 	handler := app.Handler()
 
@@ -73,7 +73,7 @@ func TestSystemBootstrapValidationAndRecovery(t *testing.T) {
 	if _, err := store.CreateUser(context.Background(), "viewer1", "Viewer", "viewer-password-1", RoleViewer); err != nil {
 		t.Fatal(err)
 	}
-	app := NewApp(store, Config{Environment: "production", PublicOrigin: "https://labops.test"})
+	app := NewApp(store, Config{Environment: "production", PublicOrigin: "https://labops.test"}, nil)
 	t.Cleanup(func() { app.Stop(); store.Close() })
 	handler := app.Handler()
 

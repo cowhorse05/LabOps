@@ -230,7 +230,7 @@ func TestRegisterClient(t *testing.T) {
 		t.Fatalf("Init: %v", err)
 	}
 
-	app := NewApp(store, Config{})
+	app := NewApp(store, Config{}, nil)
 	defer app.Stop()
 
 	c1 := &AgentClient{deviceID: "dev-a", sessionID: 1, closed: true}
@@ -271,7 +271,7 @@ func TestUnregisterClient(t *testing.T) {
 		t.Fatalf("Init: %v", err)
 	}
 
-	app := NewApp(store, Config{})
+	app := NewApp(store, Config{}, nil)
 	defer app.Stop()
 
 	client := &AgentClient{deviceID: "dev-b", sessionID: 10, closed: true}
@@ -318,7 +318,7 @@ func TestDispatchTask_NoClient(t *testing.T) {
 		t.Fatalf("Init: %v", err)
 	}
 
-	app := NewApp(store, Config{})
+	app := NewApp(store, Config{}, nil)
 	defer app.Stop()
 
 	// Seed a device so the audit log can resolve a name later.
@@ -346,7 +346,7 @@ func TestDispatchTask_NoClient(t *testing.T) {
 		t.Fatalf("dispatchTask: %v", err)
 	}
 
-	logs, err := store.ListAudit(ctx)
+	logs, err := store.ListAudit(ctx, AuditFilter{})
 	if err != nil {
 		t.Fatalf("ListAudit: %v", err)
 	}
@@ -383,7 +383,7 @@ func TestDispatchPendingTasks(t *testing.T) {
 		t.Fatalf("Init: %v", err)
 	}
 
-	app := NewApp(store, Config{})
+	app := NewApp(store, Config{}, nil)
 	defer app.Stop()
 
 	device := Device{
@@ -410,7 +410,7 @@ func TestDispatchPendingTasks(t *testing.T) {
 			t.Fatalf("dispatchPendingTasks: %v", err)
 		}
 
-		logs, err := store.ListAudit(ctx)
+		logs, err := store.ListAudit(ctx, AuditFilter{})
 		if err != nil {
 			t.Fatalf("ListAudit: %v", err)
 		}
@@ -448,7 +448,7 @@ func TestRefreshState(t *testing.T) {
 		t.Fatalf("Init: %v", err)
 	}
 
-	app := NewApp(store, Config{HeartbeatTimeout: 1 * time.Nanosecond, TaskTimeout: 1 * time.Nanosecond})
+	app := NewApp(store, Config{HeartbeatTimeout: 1 * time.Nanosecond, TaskTimeout: 1 * time.Nanosecond}, nil)
 	defer app.Stop()
 
 	// Seed an online device that should be expired.
@@ -569,7 +569,7 @@ func TestNewAppDefaults(t *testing.T) {
 	}
 	defer store.Close()
 
-	app := NewApp(store, Config{})
+	app := NewApp(store, Config{}, nil)
 	defer app.Stop()
 
 	if app.config.HeartbeatTimeout != 35*time.Second {
@@ -610,7 +610,7 @@ func TestHandleAgentWS_TokenAuth(t *testing.T) {
 		if err := store.Init(ctx); err != nil {
 			t.Fatalf("Init: %v", err)
 		}
-		app := NewApp(store, Config{AgentToken: "test-token"})
+		app := NewApp(store, Config{AgentToken: "test-token"}, nil)
 		defer app.Stop()
 
 		srv := httptest.NewServer(app.Handler())
@@ -639,7 +639,7 @@ func TestHandleAgentWS_TokenAuth(t *testing.T) {
 		if err := store.Init(ctx); err != nil {
 			t.Fatalf("Init: %v", err)
 		}
-		app := NewApp(store, Config{AgentToken: "correct-token"})
+		app := NewApp(store, Config{AgentToken: "correct-token"}, nil)
 		defer app.Stop()
 
 		srv := httptest.NewServer(app.Handler())
@@ -669,7 +669,7 @@ func TestHandleAgentWS_TokenAuth(t *testing.T) {
 		if err := store.Init(ctx); err != nil {
 			t.Fatalf("Init: %v", err)
 		}
-		app := NewApp(store, Config{AgentToken: "valid-token"})
+		app := NewApp(store, Config{AgentToken: "valid-token"}, nil)
 		defer app.Stop()
 
 		srv := httptest.NewServer(app.Handler())
@@ -702,7 +702,7 @@ func TestHandleAgentWS_Register(t *testing.T) {
 	if err := store.Init(ctx); err != nil {
 		t.Fatalf("Init: %v", err)
 	}
-	app := NewApp(store, Config{AgentToken: "reg-token"})
+	app := NewApp(store, Config{AgentToken: "reg-token"}, nil)
 	defer app.Stop()
 
 	srv := httptest.NewServer(app.Handler())
@@ -772,7 +772,7 @@ func TestHandleAgentWS_Register(t *testing.T) {
 	}
 
 	// Verify audit log was created.
-	logs, err := store.ListAudit(ctx)
+	logs, err := store.ListAudit(ctx, AuditFilter{})
 	if err != nil {
 		t.Fatalf("ListAudit: %v", err)
 	}
@@ -802,7 +802,7 @@ func TestHandleAgentWS_InvalidRegister(t *testing.T) {
 		if err := store.Init(ctx); err != nil {
 			t.Fatalf("Init: %v", err)
 		}
-		app := NewApp(store, Config{AgentToken: "inv-token"})
+		app := NewApp(store, Config{AgentToken: "inv-token"}, nil)
 		defer app.Stop()
 
 		srv := httptest.NewServer(app.Handler())
@@ -850,7 +850,7 @@ func TestHandleAgentWS_InvalidRegister(t *testing.T) {
 		if err := store.Init(ctx); err != nil {
 			t.Fatalf("Init: %v", err)
 		}
-		app := NewApp(store, Config{AgentToken: "inv-token"})
+		app := NewApp(store, Config{AgentToken: "inv-token"}, nil)
 		defer app.Stop()
 
 		srv := httptest.NewServer(app.Handler())
@@ -903,7 +903,7 @@ func TestHandleAgentWS_Heartbeat(t *testing.T) {
 	if err := store.Init(ctx); err != nil {
 		t.Fatalf("Init: %v", err)
 	}
-	app := NewApp(store, Config{AgentToken: "hb-token", HeartbeatTimeout: 35 * time.Second})
+	app := NewApp(store, Config{AgentToken: "hb-token", HeartbeatTimeout: 35 * time.Second}, nil)
 	defer app.Stop()
 
 	srv := httptest.NewServer(app.Handler())
@@ -983,7 +983,7 @@ func TestHandleAgentWS_Disconnect(t *testing.T) {
 	if err := store.Init(ctx); err != nil {
 		t.Fatalf("Init: %v", err)
 	}
-	app := NewApp(store, Config{AgentToken: "dc-token"})
+	app := NewApp(store, Config{AgentToken: "dc-token"}, nil)
 	defer app.Stop()
 
 	srv := httptest.NewServer(app.Handler())
@@ -1037,7 +1037,7 @@ func TestHandleAgentWS_Disconnect(t *testing.T) {
 	}
 
 	// Verify audit log has disconnect entry.
-	logs, err := store.ListAudit(ctx)
+	logs, err := store.ListAudit(ctx, AuditFilter{})
 	if err != nil {
 		t.Fatalf("ListAudit: %v", err)
 	}

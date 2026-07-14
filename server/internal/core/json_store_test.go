@@ -26,7 +26,7 @@ func TestJSONStoreFirstSetupEnrollmentAndSecretProtection(t *testing.T) {
 	if err := store.InitSecure(context.Background(), ""); err != nil {
 		t.Fatal(err)
 	}
-	app := NewApp(store, Config{Environment: "production", PublicOrigin: "https://labops.test"})
+	app := NewApp(store, Config{Environment: "production", PublicOrigin: "https://labops.test"}, nil)
 	t.Cleanup(func() { app.Stop(); store.Close() })
 	handler := app.Handler()
 

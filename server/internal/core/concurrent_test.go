@@ -337,7 +337,7 @@ func TestConnectionPoolStress(t *testing.T) {
 					errCh <- fmt.Errorf("g%d UpsertDevice: %v", idx, err)
 				}
 			case 4:
-				_, err := store.ListAudit(ctx)
+				_, err := store.ListAudit(ctx, AuditFilter{})
 				if err != nil {
 					errCh <- fmt.Errorf("g%d ListAudit: %v", idx, err)
 				}

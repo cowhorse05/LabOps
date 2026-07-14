@@ -545,6 +545,49 @@ func (js *JSONStore) UpdatePassword(ctx context.Context, username, newPassword s
 	return js.setPasswordLocked(username, newPassword)
 }
 
+// ChangePassword is a simplified implementation for JSONStore (no real transactions).
+// In production, always use the SQL-backed Store instead.
+func (js *JSONStore) ChangePassword(ctx context.Context, username, newPassword, userID string) (string, string, error) {
+	js.mu.Lock()
+	defer js.mu.Unlock()
+
+	if err := js.setPasswordLocked(username, newPassword); err != nil {
+		return "", "", err
+	}
+
+	// Delete all sessions for this user.
+	for id, s := range js.sessions {
+		if s.UserID == userID {
+			delete(js.sessions, id)
+		}
+	}
+	_ = js.saveFile("sessions.json", js.sessions)
+
+	// Create a new session.
+	token, err := randomToken(32)
+	if err != nil {
+		return "", "", err
+	}
+	csrf, err := randomToken(32)
+	if err != nil {
+		return "", "", err
+	}
+	sessionID := newID("session")
+	now := time.Now().UTC()
+	js.sessions[sessionID] = &jsonSession{
+		ID: sessionID, UserID: userID,
+		TokenHash:        tokenHash(token),
+		CSRFHash:         tokenHash(csrf),
+		CreatedAt:        now.Format(time.RFC3339),
+		LastSeenAt:       now.Format(time.RFC3339),
+		IdleExpiresAt:    now.Add(8 * time.Hour).Format(time.RFC3339),
+		AbsoluteExpiresAt: now.Add(24 * time.Hour).Format(time.RFC3339),
+	}
+	_ = js.saveFile("sessions.json", js.sessions)
+
+	return token, csrf, nil
+}
+
 func (js *JSONStore) MustChangePassword(ctx context.Context, username string) bool {
 	js.mu.RLock()
 	defer js.mu.RUnlock()
@@ -1122,11 +1165,29 @@ func (js *JSONStore) CreateAudit(ctx context.Context, audit AuditLog) error {
 	return js.saveFile("audit_logs.json", js.auditLogs)
 }
 
-func (js *JSONStore) ListAudit(ctx context.Context) ([]AuditLog, error) {
+func (js *JSONStore) ListAudit(ctx context.Context, filter AuditFilter) ([]AuditLog, error) {
 	js.mu.RLock()
 	defer js.mu.RUnlock()
 	result := make([]AuditLog, 0, len(js.auditLogs))
 	for _, a := range js.auditLogs {
+		if filter.Action != "" && a.Action != filter.Action {
+			continue
+		}
+		if filter.Actor != "" && a.Actor != filter.Actor {
+			continue
+		}
+		if filter.DeviceID != "" && a.DeviceID != filter.DeviceID {
+			continue
+		}
+		if filter.Status != "" && a.Status != filter.Status {
+			continue
+		}
+		if filter.From != "" && a.CreatedAt < filter.From {
+			continue
+		}
+		if filter.To != "" && a.CreatedAt > filter.To {
+			continue
+		}
 		result = append(result, AuditLog{
 			ID: a.ID, Actor: a.Actor, ActorID: a.ActorID, ActorRole: a.ActorRole,
 			RemoteAddr: a.RemoteAddr, RequestID: a.RequestID,
@@ -1135,10 +1196,22 @@ func (js *JSONStore) ListAudit(ctx context.Context) ([]AuditLog, error) {
 		})
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].CreatedAt > result[j].CreatedAt })
-	if len(result) > 200 {
-		result = result[:200]
+	limit := filter.Limit
+	if limit <= 0 || limit > 500 {
+		limit = 200
 	}
-	return result, nil
+	offset := filter.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	if offset >= len(result) {
+		return []AuditLog{}, nil
+	}
+	end := offset + limit
+	if end > len(result) {
+		end = len(result)
+	}
+	return result[offset:end], nil
 }
 
 // --- Enrollment ---

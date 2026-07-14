@@ -21,7 +21,7 @@ func TestHandleHealth(t *testing.T) {
 	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
-	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
+	app := NewApp(store, Config{WebToken: "", AgentToken: ""}, nil)
 	handler := app.Handler()
 
 	req := httptest.NewRequest("GET", "/api/health", nil)
@@ -46,7 +46,7 @@ func TestHandleLogin_Valid(t *testing.T) {
 	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
-	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
+	app := NewApp(store, Config{WebToken: "", AgentToken: ""}, nil)
 	handler := app.Handler()
 
 	body := loginRequest{Username: "admin", Password: "admin"}
@@ -78,7 +78,7 @@ func TestHandleLogin_Invalid(t *testing.T) {
 	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
-	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
+	app := NewApp(store, Config{WebToken: "", AgentToken: ""}, nil)
 	handler := app.Handler()
 
 	body := loginRequest{Username: "admin", Password: "wrong"}
@@ -107,7 +107,7 @@ func TestHandleMe(t *testing.T) {
 	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
-	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
+	app := NewApp(store, Config{WebToken: "", AgentToken: ""}, nil)
 	handler := app.Handler()
 
 	req := httptest.NewRequest("GET", "/api/auth/me", nil)
@@ -135,7 +135,7 @@ func TestHandleStats_Empty(t *testing.T) {
 	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
-	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
+	app := NewApp(store, Config{WebToken: "", AgentToken: ""}, nil)
 	handler := app.Handler()
 
 	req := httptest.NewRequest("GET", "/api/stats", nil)
@@ -166,7 +166,7 @@ func TestHandleDevices_Empty(t *testing.T) {
 	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
-	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
+	app := NewApp(store, Config{WebToken: "", AgentToken: ""}, nil)
 	handler := app.Handler()
 
 	req := httptest.NewRequest("GET", "/api/devices", nil)
@@ -210,7 +210,7 @@ func TestHandleDevices_WithData(t *testing.T) {
 		t.Fatalf("upsert device: %v", err)
 	}
 
-	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
+	app := NewApp(store, Config{WebToken: "", AgentToken: ""}, nil)
 	handler := app.Handler()
 
 	req := httptest.NewRequest("GET", "/api/devices", nil)
@@ -244,7 +244,7 @@ func TestHandleGetDevice_NotFound(t *testing.T) {
 	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
-	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
+	app := NewApp(store, Config{WebToken: "", AgentToken: ""}, nil)
 	handler := app.Handler()
 
 	req := httptest.NewRequest("GET", "/api/devices/nonexistent", nil)
@@ -296,7 +296,7 @@ func TestHandleGroups(t *testing.T) {
 		}
 	}
 
-	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
+	app := NewApp(store, Config{WebToken: "", AgentToken: ""}, nil)
 	handler := app.Handler()
 
 	req := httptest.NewRequest("GET", "/api/groups", nil)
@@ -352,7 +352,7 @@ func TestHandleCreateTask_SingleDevice(t *testing.T) {
 		t.Fatalf("upsert device: %v", err)
 	}
 
-	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
+	app := NewApp(store, Config{WebToken: "", AgentToken: ""}, nil)
 	handler := app.Handler()
 
 	reqBody := createTaskRequest{DeviceID: "task-device", Command: "echo hello"}
@@ -400,7 +400,7 @@ func TestHandleCreateTask_MissingCommand(t *testing.T) {
 	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
-	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
+	app := NewApp(store, Config{WebToken: "", AgentToken: ""}, nil)
 	handler := app.Handler()
 
 	reqBody := createTaskRequest{DeviceID: "some-device"}
@@ -429,7 +429,7 @@ func TestHandleCreateTask_MissingTarget(t *testing.T) {
 	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
-	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
+	app := NewApp(store, Config{WebToken: "", AgentToken: ""}, nil)
 	handler := app.Handler()
 
 	reqBody := createTaskRequest{Command: "echo hello"}
@@ -458,7 +458,7 @@ func TestHandleCreateTask_DeviceNotFound(t *testing.T) {
 	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
-	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
+	app := NewApp(store, Config{WebToken: "", AgentToken: ""}, nil)
 	handler := app.Handler()
 
 	reqBody := createTaskRequest{DeviceID: "nonexistent-device", Command: "echo hello"}
@@ -487,7 +487,7 @@ func TestHandleTasks_Empty(t *testing.T) {
 	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
-	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
+	app := NewApp(store, Config{WebToken: "", AgentToken: ""}, nil)
 	handler := app.Handler()
 
 	req := httptest.NewRequest("GET", "/api/tasks", nil)
@@ -512,7 +512,7 @@ func TestHandleAudit_Empty(t *testing.T) {
 	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
-	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
+	app := NewApp(store, Config{WebToken: "", AgentToken: ""}, nil)
 	handler := app.Handler()
 
 	req := httptest.NewRequest("GET", "/api/audit-logs", nil)
@@ -537,7 +537,7 @@ func TestWithAuth_NoToken(t *testing.T) {
 	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
-	app := NewApp(store, Config{WebToken: "secret-token", AgentToken: ""})
+	app := NewApp(store, Config{WebToken: "secret-token", AgentToken: ""}, nil)
 	handler := app.Handler()
 
 	req := httptest.NewRequest("GET", "/api/devices", nil)
@@ -555,7 +555,7 @@ func TestWithAuth_ValidToken(t *testing.T) {
 	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
-	app := NewApp(store, Config{WebToken: "secret-token", AgentToken: ""})
+	app := NewApp(store, Config{WebToken: "secret-token", AgentToken: ""}, nil)
 	handler := app.Handler()
 
 	req := httptest.NewRequest("GET", "/api/devices", nil)
@@ -574,7 +574,7 @@ func TestWithAuth_InvalidToken(t *testing.T) {
 	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
-	app := NewApp(store, Config{WebToken: "secret-token", AgentToken: ""})
+	app := NewApp(store, Config{WebToken: "secret-token", AgentToken: ""}, nil)
 	handler := app.Handler()
 
 	req := httptest.NewRequest("GET", "/api/devices", nil)
@@ -593,7 +593,7 @@ func TestWithAuth_SkipPaths(t *testing.T) {
 	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
-	app := NewApp(store, Config{WebToken: "secret-token", AgentToken: ""})
+	app := NewApp(store, Config{WebToken: "secret-token", AgentToken: ""}, nil)
 	handler := app.Handler()
 
 	// /api/health should be accessible without token
@@ -641,7 +641,7 @@ func TestHandleGetDevice_Found(t *testing.T) {
 		t.Fatalf("upsert device: %v", err)
 	}
 
-	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
+	app := NewApp(store, Config{WebToken: "", AgentToken: ""}, nil)
 	handler := app.Handler()
 
 	req := httptest.NewRequest("GET", "/api/devices/found-device", nil)
@@ -696,7 +696,7 @@ func TestHandleCreateTask_ByGroup(t *testing.T) {
 		}
 	}
 
-	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
+	app := NewApp(store, Config{WebToken: "", AgentToken: ""}, nil)
 	handler := app.Handler()
 
 	reqBody := createTaskRequest{GroupName: "target-group", Command: "echo hello"}
@@ -739,7 +739,7 @@ func TestHandleCreateTask_InvalidJSON(t *testing.T) {
 	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
-	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
+	app := NewApp(store, Config{WebToken: "", AgentToken: ""}, nil)
 	handler := app.Handler()
 
 	req := httptest.NewRequest("POST", "/api/tasks", bytes.NewBufferString("{malformed}"))
@@ -775,7 +775,7 @@ func TestHandleGetTask_Found(t *testing.T) {
 		t.Fatalf("upsert device: %v", err)
 	}
 
-	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
+	app := NewApp(store, Config{WebToken: "", AgentToken: ""}, nil)
 	handler := app.Handler()
 
 	// Create a task via the handler first
@@ -834,7 +834,7 @@ func TestHandleGetTask_NotFound(t *testing.T) {
 	store, _ := OpenStore(DriverSQLite, ":memory:")
 	defer store.Close()
 	store.Init(ctx)
-	app := NewApp(store, Config{WebToken: "", AgentToken: ""})
+	app := NewApp(store, Config{WebToken: "", AgentToken: ""}, nil)
 	handler := app.Handler()
 
 	req := httptest.NewRequest("GET", "/api/tasks/nonexistent-task", nil)

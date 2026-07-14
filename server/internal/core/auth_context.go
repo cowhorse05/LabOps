@@ -44,6 +44,7 @@ func isStateChanging(method string) bool {
 
 func isCSRFExempt(path string) bool {
 	return path == "/api/auth/login" ||
+		path == "/api/auth/register" ||
 		path == "/api/agent/enroll" ||
 		path == "/api/v1/system/bootstrap" ||
 		path == "/api/setup/admin"

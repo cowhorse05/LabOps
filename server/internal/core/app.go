@@ -3,7 +3,7 @@ package core
 import (
 	"context"
 	"crypto/subtle"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -19,6 +19,7 @@ type Config struct {
 	EncryptionKey    string
 	AgentToken       string
 	WebToken         string
+	OpenRegistration bool
 	HeartbeatTimeout time.Duration
 	TaskTimeout      time.Duration
 	LLMURL           string
@@ -28,6 +29,7 @@ type Config struct {
 type App struct {
 	store    DataStore
 	config   Config
+	logger   *slog.Logger
 	upgrader websocket.Upgrader
 	analyzer *Analyzer
 
@@ -68,16 +70,20 @@ func newRateLimiter(maxTokens int, interval time.Duration) *rateLimiter {
 	}
 }
 
-func NewApp(store DataStore, config Config) *App {
+func NewApp(store DataStore, config Config, logger *slog.Logger) *App {
 	if config.HeartbeatTimeout == 0 {
 		config.HeartbeatTimeout = 35 * time.Second
 	}
 	if config.TaskTimeout == 0 {
 		config.TaskTimeout = 2 * time.Minute
 	}
+	if logger == nil {
+		logger = slog.Default()
+	}
 	app := &App{
 		store:        store,
 		config:       config,
+		logger:       logger,
 		clients:      make(map[string]*AgentClient),
 		rateLimiters: make(map[string]*rateLimiter),
 		upgrader: websocket.Upgrader{
@@ -90,7 +96,7 @@ func NewApp(store DataStore, config Config) *App {
 			},
 		},
 	}
-	app.analyzer = NewAnalyzer(store, config)
+	app.analyzer = NewAnalyzer(store, config, logger)
 	app.analyzer.OnDispatch = app.dispatchTask
 	app.analyzer.Start()
 	go app.maintenanceLoop()
@@ -113,6 +119,7 @@ func (a *App) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", a.handleHealth)
 	mux.HandleFunc("POST /api/auth/login", a.handleLogin)
+	mux.HandleFunc("POST /api/auth/register", a.handleSelfRegister)
 	mux.HandleFunc("POST /api/auth/change-password", a.handleChangePassword)
 	mux.HandleFunc("POST /api/auth/logout", a.handleLogout)
 	mux.HandleFunc("GET /api/auth/me", a.handleMe)
@@ -150,7 +157,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/system/bootstrap", a.handleSystemBootstrap)
 	mux.HandleFunc("GET /api/setup/status", a.handleSetupStatus)
 	mux.HandleFunc("POST /api/setup/admin", a.handleSetupAdmin)
-	return a.withRequestID(a.withCORS(a.withRateLimit(a.withAuth(mux))))
+	return a.withRequestID(a.withRequestLogging(a.withCORS(a.withRateLimit(a.withAuth(mux)))))
 }
 
 func (a *App) withCORS(next http.Handler) http.Handler {
@@ -163,7 +170,8 @@ func (a *App) withCORS(next http.Handler) http.Handler {
 				allowedOrigin = "*"
 			}
 		}
-		if origin != "" && allowedOrigin != "*" && origin != allowedOrigin {
+		if origin != "" && allowedOrigin != "*" && !originsMatch(origin, allowedOrigin) {
+			a.logger.Warn("CORS blocked", "origin", origin, "allowed", allowedOrigin)
 			writeAPIError(w, http.StatusForbidden, "ORIGIN_NOT_ALLOWED", "origin is not allowed")
 			return
 		}
@@ -182,6 +190,25 @@ func (a *App) withCORS(next http.Handler) http.Handler {
 	})
 }
 
+// originsMatch compares two HTTP origins, normalizing default ports and trailing slashes.
+// "http://47.80.31.24:80" == "http://47.80.31.24" and "http://47.80.31.24/" == "http://47.80.31.24".
+func originsMatch(a, b string) bool {
+	na := normalizeOrigin(a)
+	nb := normalizeOrigin(b)
+	return na == nb
+}
+
+func normalizeOrigin(raw string) string {
+	s := strings.TrimRight(raw, "/")
+	// Strip default port: 80 for http, 443 for https
+	if strings.HasPrefix(s, "http://") {
+		s = strings.TrimSuffix(s, ":80")
+	} else if strings.HasPrefix(s, "https://") {
+		s = strings.TrimSuffix(s, ":443")
+	}
+	return strings.ToLower(s)
+}
+
 func (a *App) withAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodOptions ||
@@ -189,6 +216,7 @@ func (a *App) withAuth(next http.Handler) http.Handler {
 			r.URL.Path == "/api/agent/ws" ||
 			r.URL.Path == "/api/health" ||
 			r.URL.Path == "/api/auth/login" ||
+			r.URL.Path == "/api/auth/register" ||
 			r.URL.Path == "/api/v1/system/status" ||
 			r.URL.Path == "/api/v1/system/bootstrap" ||
 			r.URL.Path == "/api/setup/status" ||
@@ -278,7 +306,7 @@ func (a *App) withRateLimit(next http.Handler) http.Handler {
 		key := "general:" + ip
 		maxTokens := 60
 		interval := time.Second
-		if r.URL.Path == "/api/auth/login" {
+		if r.URL.Path == "/api/auth/login" || r.URL.Path == "/api/auth/register" {
 			key, maxTokens, interval = "login:"+ip, 5, 3*time.Minute
 		} else if r.URL.Path == "/api/v1/system/bootstrap" || r.URL.Path == "/api/setup/admin" {
 			key, maxTokens, interval = "bootstrap:"+ip, 5, 3*time.Minute
@@ -306,14 +334,14 @@ func (a *App) withRateLimit(next http.Handler) http.Handler {
 func (a *App) refreshState(ctx context.Context) {
 	cutoff := time.Now().UTC().Add(-a.config.HeartbeatTimeout).Format(time.RFC3339)
 	if err := a.store.ExpireDevices(ctx, cutoff); err != nil {
-		log.Printf("expire devices error: %v", err)
+		a.logger.Error("expire devices", "error", err)
 	}
 	taskCutoff := time.Now().UTC().Add(-a.config.TaskTimeout).Format(time.RFC3339)
 	if err := a.store.TimeoutTasks(ctx, taskCutoff); err != nil {
-		log.Printf("timeout tasks error: %v", err)
+		a.logger.Error("timeout tasks", "error", err)
 	}
 	if err := a.store.PruneExpiredWebSessions(ctx); err != nil {
-		log.Printf("prune web sessions error: %v", err)
+		a.logger.Error("prune web sessions", "error", err)
 	}
 }
 

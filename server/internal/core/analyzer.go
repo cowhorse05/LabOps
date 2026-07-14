@@ -3,7 +3,7 @@ package core
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"sort"
 	"strings"
 	"sync"
@@ -58,6 +58,7 @@ type AiOpsReport struct {
 type Analyzer struct {
 	store     DataStore
 	config    Config
+	logger    *slog.Logger
 	llmClient *LLMClient
 
 	// OnDispatch is called to dispatch a task to an agent. Set by App after construction.
@@ -71,8 +72,11 @@ type Analyzer struct {
 }
 
 // NewAnalyzer creates an Analyzer. Call Start() to begin the analysis loop.
-func NewAnalyzer(store DataStore, config Config) *Analyzer {
-	a := &Analyzer{store: store, config: config, done: make(chan struct{})}
+func NewAnalyzer(store DataStore, config Config, logger *slog.Logger) *Analyzer {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	a := &Analyzer{store: store, config: config, logger: logger, done: make(chan struct{})}
 	a.initLLM()
 	return a
 }
@@ -93,7 +97,7 @@ func (a *Analyzer) initLLM() {
 	defer cancel()
 	dbCfg, err := a.store.GetLLMConfig(ctx)
 	if err != nil {
-		log.Printf("aiops: GetLLMConfig error: %v", err)
+		a.logger.Error("aiops: get LLM config", "error", err)
 	}
 	url := a.config.LLMURL
 	key := a.config.LLMAPIKey
@@ -113,15 +117,15 @@ func (a *Analyzer) initLLM() {
 	}
 	if url != "" && key != "" {
 		a.llmClient = NewLLMClient(url, key, model, providerType)
-		log.Printf("aiops: LLM client initialized (%s, model=%s, type=%s, autoExec=%v)", url, model, providerType, a.autoExecuteReadOnly)
+		a.logger.Info("aiops: LLM client initialized", "url", url, "model", model, "type", providerType, "autoExec", a.autoExecuteReadOnly)
 	} else {
 		a.llmClient = nil
 		if url == "" && key == "" {
-			log.Printf("aiops: LLM not configured — set LABOPS_LLM_URL and LABOPS_LLM_API_KEY env vars, or configure via Settings UI. Using rule-based analysis only.")
+			a.logger.Warn("aiops: LLM not configured, using rule-based analysis only")
 		} else if url == "" {
-			log.Printf("aiops: LLM URL not configured — set LABOPS_LLM_URL env var or configure via Settings UI.")
+			a.logger.Warn("aiops: LLM URL not configured")
 		} else {
-			log.Printf("aiops: LLM API key not configured — set LABOPS_LLM_API_KEY env var or configure via Settings UI.")
+			a.logger.Warn("aiops: LLM API key not configured")
 		}
 	}
 }
@@ -157,16 +161,16 @@ func (a *Analyzer) LatestReport() *AiOpsReport {
 func (a *Analyzer) run(ctx context.Context) {
 	devices, err := a.store.ListDevices(ctx)
 	if err != nil {
-		log.Printf("aiops: ListDevices error: %v", err)
+		a.logger.Error("aiops: list devices", "error", err)
 		return
 	}
 	tasks, err := a.store.ListTasks(ctx)
 	if err != nil {
-		log.Printf("aiops: ListTasks error: %v", err)
+		a.logger.Error("aiops: list tasks", "error", err)
 	}
 	groups, err := a.store.Groups(ctx)
 	if err != nil {
-		log.Printf("aiops: Groups error: %v", err)
+		a.logger.Error("aiops: groups", "error", err)
 	}
 
 	report := a.analyze(devices, tasks, groups)
@@ -177,7 +181,7 @@ func (a *Analyzer) run(ctx context.Context) {
 		defer cancel()
 		textAnalysis, recs, err := a.llmClient.AnalyzeDevicesStructured(llmCtx, devices, tasks)
 		if err != nil {
-			log.Printf("aiops: LLM structured analysis error: %v", err)
+			a.logger.Error("aiops: LLM analysis", "error", err)
 			report.LLMAnalysis = "LLM 分析暂时不可用，显示规则引擎分析结果。"
 		} else {
 			if textAnalysis != "" {
@@ -412,7 +416,7 @@ func (a *Analyzer) validateRecommendations(recs []LLMRecommendation, devices []D
 	for _, rec := range recs {
 		dev, ok := deviceMap[rec.DeviceID]
 		if !ok {
-			log.Printf("aiops: recommendation %s references unknown device %s, skipping", rec.ID, rec.DeviceID)
+			a.logger.Warn("aiops: skipping recommendation for unknown device", "rec_id", rec.ID, "device_id", rec.DeviceID)
 			continue
 		}
 		if rec.DeviceName == "" {
@@ -433,7 +437,7 @@ func (a *Analyzer) validateRecommendations(recs []LLMRecommendation, devices []D
 // autoExecuteRecommendations creates and dispatches tasks for read-only recommendations.
 func (a *Analyzer) autoExecuteRecommendations(ctx context.Context, recs []LLMRecommendation) {
 	if a.OnDispatch == nil {
-		log.Printf("aiops: dispatch callback not ready, skipping auto-execute")
+		a.logger.Warn("aiops: dispatch callback not ready")
 		return
 	}
 	for i := range recs {
@@ -446,17 +450,17 @@ func (a *Analyzer) autoExecuteRecommendations(ctx context.Context, recs []LLMRec
 		}
 		task, err := a.store.CreateTask(ctx, rec.DeviceID, rec.GroupName, rec.Command, "llm-auto")
 		if err != nil {
-			log.Printf("aiops: auto-execute create task error for rec %s: %v", rec.ID, err)
+			a.logger.Error("aiops: auto-execute create task", "rec_id", rec.ID, "error", err)
 			rec.Status = "error"
 			continue
 		}
 		rec.TaskID = task.ID
 		if err := a.OnDispatch(ctx, task); err != nil {
-			log.Printf("aiops: auto-execute dispatch error for rec %s: %v", rec.ID, err)
+			a.logger.Error("aiops: auto-execute dispatch", "rec_id", rec.ID, "error", err)
 			rec.Status = "error"
 		} else {
 			rec.Status = "executed"
-			log.Printf("aiops: auto-dispatched rec %s (%s → %s)", rec.ID, rec.DeviceName, rec.Command)
+			a.logger.Info("aiops: auto-dispatched recommendation", "rec_id", rec.ID, "device", rec.DeviceName, "command", rec.Command)
 		}
 	}
 }
