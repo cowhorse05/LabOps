@@ -4,6 +4,7 @@ import { Avatar, Button, Drawer, Dropdown, Layout, Menu, Space, Tag, Typography,
 import {
   AuditOutlined,
   ClusterOutlined,
+  FileTextOutlined,
   RobotOutlined,
   DashboardOutlined,
   DesktopOutlined,
@@ -28,6 +29,7 @@ const baseNavItems = [
   { key: '/groups', icon: <ClusterOutlined />, label: '分组' },
   { key: '/tasks', icon: <ProfileOutlined />, label: '任务' },
   { key: '/audit', icon: <AuditOutlined />, label: '审计' },
+  { key: '/logs', icon: <FileTextOutlined />, label: '日志' },
   { key: '/aiops', icon: <RobotOutlined />, label: 'AI Ops' },
 ];
 

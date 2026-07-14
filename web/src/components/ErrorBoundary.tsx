@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { Button, Result } from 'antd';
+import { useLogStore } from '@/stores/logStore';
 
 interface Props {
   children: ReactNode;
@@ -19,6 +20,16 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('ErrorBoundary caught:', error, info);
+    try {
+      useLogStore.getState().push({
+        level: 'error',
+        source: 'ErrorBoundary',
+        message: error.message || '未知渲染错误',
+        detail: `组件栈:\n${info.componentStack ?? '无'}`,
+      });
+    } catch {
+      // store unavailable during catastrophic failure
+    }
   }
 
   render() {

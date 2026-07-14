@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build server (Go 1.25)
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+      - run: |
+          mkdir -p dist
+          cd server
+          GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w" -o ../dist/labops-server-linux-amd64     ./cmd/server/
+          GOOS=linux   GOARCH=arm64 go build -ldflags="-s -w" -o ../dist/labops-server-linux-arm64     ./cmd/server/
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o ../dist/labops-server-windows-amd64.exe ./cmd/server/
+
+      - name: Build agent (Go 1.24)
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+      - run: |
+          cd agent
+          GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w" -o ../dist/labops-agent-linux-amd64     ./cmd/agent/
+          GOOS=linux   GOARCH=arm64 go build -ldflags="-s -w" -o ../dist/labops-agent-linux-arm64     ./cmd/agent/
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o ../dist/labops-agent-windows-amd64.exe ./cmd/agent/
+
+      - name: Generate checksums
+        run: cd dist && sha256sum * > checksums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
-import { App, Button, Card, Form, Input, InputNumber, Modal, Popconfirm, Progress, Select, Space, Table, Tag, Typography } from 'antd';
-import { CopyOutlined, DeleteOutlined, EyeOutlined, PlusOutlined, ReloadOutlined, SafetyCertificateOutlined, SearchOutlined } from '@ant-design/icons';
+import { Alert, App, Button, Card, Form, Input, InputNumber, Modal, Popconfirm, Progress, Segmented, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
+import { CopyOutlined, DeleteOutlined, EyeOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { labopsApi } from '@/api/labops';
 import { useLoadable } from '@/hooks/useLoadable';
 import { statusColor, statusText } from '@/utils/status';
 import { useAuthStore } from '@/stores/auth';
+import { logger } from '@/utils/logger';
 
 export default function DevicesPage() {
   const navigate = useNavigate();
@@ -15,16 +16,16 @@ export default function DevicesPage() {
   const { data: devices, loading, reload } = useLoadable(() => labopsApi.devices(), { intervalMs: 10000, onError: () => message.error('加载设备列表失败') });
   const { data: groups } = useLoadable(() => labopsApi.groups(), { intervalMs: 60000 });
 
-  const [createModalVisible, setCreateModalVisible] = useState(false);
+  const [addDeviceOpen, setAddDeviceOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>('agent');
+  const [osType, setOsType] = useState<'linux' | 'windows'>('linux');
   const [createForm] = Form.useForm();
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
-  const [enrollmentOpen, setEnrollmentOpen] = useState(false);
   const [enrollmentCreating, setEnrollmentCreating] = useState(false);
   const [createdCode, setCreatedCode] = useState('');
   const [serverUrl, setServerUrl] = useState(() => window.location.origin);
   const canManage = useAuthStore((s) => s.user?.permissions.includes('devices:revoke') ?? false);
-  const canEnroll = useAuthStore((s) => s.user?.permissions.includes('enrollment:manage') ?? false);
 
   const filtered = useMemo(() => {
     const k = keyword.trim().toLowerCase();
@@ -38,7 +39,8 @@ export default function DevicesPage() {
       setCreating(true);
       await labopsApi.createDevice(values);
       message.success(`设备 ${values.name} 创建成功`);
-      setCreateModalVisible(false);
+      setAddDeviceOpen(false);
+      setActiveTab('agent');
       createForm.resetFields();
       reload();
     } catch (err: any) {
@@ -68,21 +70,33 @@ export default function DevicesPage() {
       const item = await labopsApi.createEnrollmentCode({ expiresInSeconds: 600, maxUses: 1 });
       setCreatedCode(item.code || '');
       message.success('一次性注册码已生成');
+      logger.info('DevicesPage', '生成注册码成功', { osType, serverUrl });
     } catch (err: any) {
-      message.error(`生成注册码失败: ${err?.response?.data?.error || err?.message}`);
+      const msg = err?.response?.data?.error || err?.message;
+      message.error(`生成注册码失败: ${msg}`);
+      logger.error('DevicesPage', '生成注册码失败', err);
     } finally {
       setEnrollmentCreating(false);
     }
   };
 
-  const closeEnrollment = () => {
-    setEnrollmentOpen(false);
+  const closeAddDevice = () => {
+    setAddDeviceOpen(false);
     setCreatedCode('');
+    setActiveTab('agent');
+    setOsType('linux');
+    createForm.resetFields();
   };
 
-  const enrollCommand = createdCode
+  const linuxCommand = createdCode
     ? `sudo labops-agent --server=${serverUrl || '<LABOPS_SERVER_URL>'} --enroll-code=${createdCode} --name "$(hostname)" --group lab --real`
     : '';
+
+  const windowsCommand = createdCode
+    ? `.\\labops-agent.exe --server=${serverUrl || '<LABOPS_SERVER_URL>'} --enroll-code=${createdCode} --name $env:COMPUTERNAME --group lab --real`
+    : '';
+
+  const enrollCommand = osType === 'windows' ? windowsCommand : linuxCommand;
 
   const copyText = async (value: string, success: string) => {
     await navigator.clipboard.writeText(value);
@@ -97,14 +111,9 @@ export default function DevicesPage() {
           <Typography.Text className="muted">Agent 连接后会自动出现在这里，也可以手动创建。</Typography.Text>
         </div>
         <Space wrap>
-          {canEnroll && (
-            <Button type="primary" icon={<SafetyCertificateOutlined />} onClick={() => setEnrollmentOpen(true)}>
-              添加设备
-            </Button>
-          )}
-          {canManage && <Button icon={<PlusOutlined />} onClick={() => setCreateModalVisible(true)}>
-            手动创建设备
-          </Button>}
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setAddDeviceOpen(true)}>
+            添加设备
+          </Button>
           <Input
             allowClear
             prefix={<SearchOutlined />}
@@ -179,89 +188,142 @@ export default function DevicesPage() {
           ]}
         />
       </Card>
+
       <Modal
-        title="添加 Linux Agent 设备"
-        open={enrollmentOpen}
-        onCancel={closeEnrollment}
-        footer={[
-          <Button key="close" onClick={closeEnrollment}>关闭</Button>,
-          <Button key="create" type="primary" loading={enrollmentCreating} onClick={handleCreateEnrollmentCode}>生成一次性注册码</Button>,
+        title="添加设备"
+        open={addDeviceOpen}
+        onCancel={closeAddDevice}
+        footer={activeTab === 'manual' ? [
+          <Button key="cancel" onClick={closeAddDevice}>取消</Button>,
+          <Button key="submit" type="primary" loading={creating} onClick={handleCreate}>确认创建</Button>,
+        ] : [
+          <Button key="close" onClick={closeAddDevice}>关闭</Button>,
+          <Button key="generate" type="primary" loading={enrollmentCreating} onClick={handleCreateEnrollmentCode}>生成一次性注册码</Button>,
         ]}
         width={720}
-      >
-        <Typography.Paragraph className="muted">
-          注册码只显示一次，默认 10 分钟内有效且限用 1 次。目标主机必须能访问下面的 Server URL。
-        </Typography.Paragraph>
-        <Form layout="vertical">
-          <Form.Item label="Server URL">
-            <Input
-              value={serverUrl}
-              onChange={(event) => setServerUrl(event.target.value)}
-              placeholder="例如: https://cowhorse.xyz 或 http://你的本机IP:18080"
-            />
-          </Form.Item>
-        </Form>
-        {createdCode ? (
-          <Space direction="vertical" size={14} style={{ width: '100%' }}>
-            <div>
-              <Typography.Text strong>一次性注册码</Typography.Text>
-              <Space.Compact block style={{ marginTop: 8 }}>
-                <Input.Password value={createdCode} readOnly visibilityToggle />
-                <Button icon={<CopyOutlined />} onClick={() => copyText(createdCode, '注册码已复制')}>复制</Button>
-              </Space.Compact>
-            </div>
-            <div>
-              <Typography.Text strong>Ubuntu/Linux 登记命令</Typography.Text>
-              <Typography.Paragraph className="task-output" copyable={{ text: enrollCommand }} style={{ marginTop: 8 }}>
-                <code>{enrollCommand}</code>
-              </Typography.Paragraph>
-            </div>
-          </Space>
-        ) : (
-          <Card size="small">
-            <Typography.Text>点击“生成一次性注册码”后，把生成的命令复制到目标 Linux 主机执行。</Typography.Text>
-          </Card>
-        )}
-      </Modal>
-      <Modal
-        title="手动创建设备"
-        open={createModalVisible}
-        onOk={handleCreate}
-        onCancel={() => { setCreateModalVisible(false); createForm.resetFields(); }}
-        confirmLoading={creating}
         destroyOnHidden
       >
-        <Form form={createForm} layout="vertical">
-          <Form.Item name="name" label="设备名称" rules={[{ required: true, message: '请输入设备名称' }]}>
-            <Input placeholder="例如: 我的笔记本" />
-          </Form.Item>
-          <Form.Item name="groupName" label="分组" rules={[{ required: true, message: '请输入或选择分组' }]}>
-            <Select
-              mode="tags"
-              maxCount={1}
-              placeholder="输入分组名，例如: lab、prod"
-              options={(groups ?? []).map((g) => ({ label: g.name, value: g.name }))}
-            />
-          </Form.Item>
-          <Form.Item name="hostname" label="主机名">
-            <Input placeholder="自动使用设备名称" />
-          </Form.Item>
-          <Form.Item name="os" label="操作系统">
-            <Input placeholder="例如: Ubuntu 24.04" />
-          </Form.Item>
-          <Form.Item name="ip" label="IP 地址">
-            <Input placeholder="例如: 192.168.1.100" />
-          </Form.Item>
-          <Form.Item name="cpuCores" label="CPU 核心数">
-            <InputNumber min={1} max={256} style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item name="memoryMb" label="内存 (MB)">
-            <InputNumber min={128} max={1048576} step={1024} style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item name="diskTotalGb" label="磁盘 (GB)">
-            <InputNumber min={1} max={65536} style={{ width: '100%' }} />
-          </Form.Item>
-        </Form>
+        <Tabs
+          activeKey={activeTab}
+          onChange={(key) => { setActiveTab(key); setCreatedCode(''); }}
+          items={[
+            {
+              key: 'agent',
+              label: 'Agent 接入',
+              children: (
+                <>
+                  <Typography.Paragraph className="muted">
+                    在目标主机上安装 LabOps Agent 后，使用注册码一键接入。Agent 会自动上报主机名、系统、IP、CPU、内存、磁盘等信息，无需手动填写。
+                  </Typography.Paragraph>
+                  <Alert
+                    type="info"
+                    showIcon
+                    style={{ marginBottom: 16 }}
+                    message="前置条件：安装 LabOps Agent"
+                    description={
+                      osType === 'linux' ? (
+                        <Typography.Text>
+                          在目标 Linux 主机上，先构建 Agent 二进制：<br />
+                          <code>cd agent &amp;&amp; go build -o labops-agent ./cmd/agent/</code><br />
+                          也可使用一键安装脚本：<code>sudo bash scripts/install-agent.sh --server={serverUrl} --enroll-code=&lt;注册码&gt;</code>
+                        </Typography.Text>
+                      ) : (
+                        <Typography.Text>
+                          在目标 Windows 主机上（需安装 Go），构建 Agent：<br />
+                          <code>cd agent; go build -o labops-agent.exe ./cmd/agent/</code><br />
+                          将 <code>labops-agent.exe</code> 放到目标机器上，然后用下方生成的命令运行。
+                        </Typography.Text>
+                      )
+                    }
+                  />
+                  <Form layout="vertical">
+                    <Form.Item label="目标系统">
+                      <Segmented
+                        options={[
+                          { label: 'Linux', value: 'linux' },
+                          { label: 'Windows', value: 'windows' },
+                        ]}
+                        value={osType}
+                        onChange={(value) => setOsType(value as 'linux' | 'windows')}
+                      />
+                    </Form.Item>
+                    <Form.Item label="Server URL" extra="确保目标主机能访问此地址">
+                      <Input
+                        value={serverUrl}
+                        onChange={(event) => setServerUrl(event.target.value)}
+                        placeholder="例如: https://cowhorse.xyz 或 http://你的本机IP:8080"
+                      />
+                    </Form.Item>
+                  </Form>
+                  {createdCode ? (
+                    <Space direction="vertical" size={14} style={{ width: '100%' }}>
+                      <div>
+                        <Typography.Text strong>一次性注册码</Typography.Text>
+                        <Typography.Text type="secondary" style={{ marginLeft: 8 }}>仅显示一次，10 分钟内有效</Typography.Text>
+                        <Space.Compact block style={{ marginTop: 8 }}>
+                          <Input.Password value={createdCode} readOnly visibilityToggle />
+                          <Button icon={<CopyOutlined />} onClick={() => copyText(createdCode, '注册码已复制')}>复制</Button>
+                        </Space.Compact>
+                      </div>
+                      <div>
+                        <Typography.Text strong>{osType === 'windows' ? 'Windows PowerShell' : 'Ubuntu/Linux'} 接入命令</Typography.Text>
+                        <Typography.Paragraph className="task-output" copyable={{ text: enrollCommand }} style={{ marginTop: 8 }}>
+                          <code>{enrollCommand}</code>
+                        </Typography.Paragraph>
+                      </div>
+                    </Space>
+                  ) : (
+                    <Card size="small">
+                      <Typography.Text>点击"生成一次性注册码"后，将生成的命令复制到目标主机执行即可完成接入。</Typography.Text>
+                    </Card>
+                  )}
+                </>
+              ),
+            },
+            {
+              key: 'manual',
+              label: '手动创建',
+              children: (
+                <>
+                  <Typography.Paragraph className="muted" style={{ marginBottom: 16 }}>
+                    适用于无法运行 Agent 的设备（网络设备、打印机等），手动录入设备信息进行跟踪管理。
+                  </Typography.Paragraph>
+                  <Form form={createForm} layout="vertical">
+                    <Form.Item name="name" label="设备名称" rules={[{ required: true, message: '请输入设备名称' }]}>
+                      <Input placeholder="例如: 核心交换机" />
+                    </Form.Item>
+                    <Form.Item name="groupName" label="分组" rules={[{ required: true, message: '请输入或选择分组' }]}>
+                      <Select
+                        mode="tags"
+                        maxCount={1}
+                        placeholder="输入分组名，例如: network、lab"
+                        options={(groups ?? []).map((g) => ({ label: g.name, value: g.name }))}
+                      />
+                    </Form.Item>
+                    <Form.Item name="hostname" label="主机名 / IP">
+                      <Input placeholder="例如: 192.168.1.1" />
+                    </Form.Item>
+                    <Form.Item name="os" label="操作系统 / 固件">
+                      <Input placeholder="例如: Cisco IOS 17.3" />
+                    </Form.Item>
+                    <Form.Item name="ip" label="管理 IP">
+                      <Input placeholder="例如: 192.168.1.100" />
+                    </Form.Item>
+                    <Form.Item name="cpuCores" label="CPU 核心数">
+                      <InputNumber min={1} max={256} style={{ width: '100%' }} />
+                    </Form.Item>
+                    <Form.Item name="memoryMb" label="内存 (MB)">
+                      <InputNumber min={128} max={1048576} step={1024} style={{ width: '100%' }} />
+                    </Form.Item>
+                    <Form.Item name="diskTotalGb" label="磁盘 (GB)">
+                      <InputNumber min={1} max={65536} style={{ width: '100%' }} />
+                    </Form.Item>
+                  </Form>
+                </>
+              ),
+            },
+          ]}
+        />
       </Modal>
     </div>
   );

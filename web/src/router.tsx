@@ -14,6 +14,7 @@ import GroupsPage from '@/pages/GroupsPage';
 import UsersPage from '@/pages/UsersPage';
 import EnrollmentPage from '@/pages/EnrollmentPage';
 import TemplatesPage from '@/pages/TemplatesPage';
+import LogsPage from '@/pages/LogsPage';
 import { useAuthStore } from '@/stores/auth';
 import { authApi } from '@/api/labops';
 
@@ -60,6 +61,7 @@ export const router = createBrowserRouter([
       { path: 'aiops', element: <AiOpsPage /> },
       { path: 'aiops/settings', element: <AiOpsSettingsPage /> },
       { path: 'enrollment', element: <EnrollmentPage /> },
+      { path: 'logs', element: <LogsPage /> },
       { path: 'templates', element: <TemplatesPage /> },
       { path: 'users', element: <UsersPage /> },
     ],
