@@ -1,0 +1,24 @@
+server/internal/core/api.go
+  s_698b4574d4003e::t_936bfb768e4ef7 299,301-303
+  s_698b4574d4003e::t_026790c8524d1a 606
+  s_698b4574d4003e::t_aee4a3a6459ee6 330,332-334
+server/internal/core/enrollment.go
+  s_698b4574d4003e::t_664f7aa0cdbee7 182
+  s_698b4574d4003e::t_4e803bf2c799a9 191
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.33-trip",
+  "base_commit_sha": "06694ae98eb735ed67e1ff36b62ed8ef493a52aa",
+  "prompts": {},
+  "sessions": {
+    "s_698b4574d4003e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f771b9f8-42eb-4b4f-b120-9a8f8b7061b9",
+        "model": "deepseek-v4-pro"
+      },
+      "human_author": "cowhorse05 <yli257812@gmail.com>"
+    }
+  }
+}
