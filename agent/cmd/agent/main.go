@@ -341,7 +341,11 @@ func executeProcess(payload commandPayload) (string, string, int) {
 	} else {
 		cmd = exec.CommandContext(ctx, "/bin/sh", "-c", payload.Command)
 	}
-	cmd.Env = append(os.Environ(), "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C.UTF-8")
+	cmd.Env = os.Environ()
+	// Ensure LANG is set for consistent output; don't clobber the system PATH.
+	if runtime.GOOS != "windows" {
+		cmd.Env = append(cmd.Env, "LANG=C.UTF-8")
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

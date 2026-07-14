@@ -25,6 +25,10 @@ export const authApi = {
     const { data } = await api.post<{ user: User; mustChangePassword?: boolean }>('/auth/login', { username, password });
     return data;
   },
+  async register(input: { username: string; displayName?: string; password: string; confirmPassword: string }) {
+    const { data } = await api.post<{ user: User; mustChangePassword: boolean }>('/auth/register', input);
+    return data;
+  },
   async me() {
     const { data } = await api.get<User>('/auth/me');
     return data;
