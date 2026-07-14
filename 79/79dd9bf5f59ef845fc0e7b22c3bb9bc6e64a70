@@ -1,0 +1,72 @@
+server/internal/core/store.go
+  s_698b4574d4003e::t_dbf40391f18efc 861-895,899-903
+  s_698b4574d4003e::t_9297fcdd4931ff 86
+  s_698b4574d4003e::t_e869b5bfee5e7f 41
+  s_698b4574d4003e::t_4981e0b3660312 355-411
+server/internal/core/security_v1_test.go
+  s_698b4574d4003e::t_fdd85c72c1f7c3 25
+server/internal/core/setup_bootstrap_test.go
+  s_698b4574d4003e::t_fdd85c72c1f7c3 23,76
+server/internal/core/requestlog.go
+  s_698b4574d4003e::t_ed7b7ac74b3451 1-57
+server/cmd/server/main.go
+  s_698b4574d4003e::t_9e7f9f8073b739 5,19-39,57-58,63-64,70-71,75-76,79-80,82,85-86,89-90,98-100,103,116,121,125,127-128,130,133,140-141
+server/internal/core/app.go
+  s_698b4574d4003e::t_3011cd02db27c0 6
+  s_698b4574d4003e::t_9647ebfb9e995e 341
+  s_698b4574d4003e::t_b8568726ea4989 32
+  s_698b4574d4003e::t_5d08310e7ebea8 99
+  s_698b4574d4003e::t_bdef15b7db31d9 344
+  s_698b4574d4003e::t_bfa1f850d23204 73,80-82,86
+  s_698b4574d4003e::t_c672b69feeabfe 337
+  s_698b4574d4003e::t_fc3abf0ac21a25 160
+  s_698b4574d4003e::t_d3e34aa708f2ca 173,193-209
+  s_698b4574d4003e::t_f9c98964881912 174
+  s_698b4574d4003e::t_7ca549a03bc1f5 22,122,219,309
+server/internal/core/types.go
+  s_698b4574d4003e::t_75cff317ddfa38 128-140
+server/internal/core/auth_context.go
+  s_698b4574d4003e::t_ccf1c56b0a1892 47
+server/internal/core/analyzer.go
+  s_698b4574d4003e::t_eebff5667aeaff 6
+  s_698b4574d4003e::t_5c796895d81412 61,75-79
+server/internal/core/json_store.go
+  s_698b4574d4003e::t_1abff2cd8f70d9 559-561,564,577,585-586
+  s_698b4574d4003e::t_19d297712881b4 1168,1173-1190,1199-1201,1203-1214
+  s_698b4574d4003e::t_c1333f59244464 548-558,562-563,565-576,578-584,587-590
+server/internal/core/api_test.go
+  s_698b4574d4003e::t_fdd85c72c1f7c3 24,49,81,110,138,169,213,247,299,355,403,432,461,490,515,540,558,577,596,644,699,742,778,837
+server/internal/core/api.go
+  s_698b4574d4003e::t_3f2e78235fc798 741-743,754-756,760-789,791-802,806-807,809-811
+  s_698b4574d4003e::t_cc75d844642da4 64,69,74-76,87
+  s_698b4574d4003e::t_102935fb01d9c2 790
+  s_698b4574d4003e::t_d3fafe8ec9263a 127,132-133,135-136,140
+  s_698b4574d4003e::t_8eb0daaee01e2d 10
+  s_698b4574d4003e::t_aa7e8b0543efbb 149
+  s_698b4574d4003e::t_da5ccbac8efc1a 182
+  s_698b4574d4003e::t_fd3cb1ab77fbf4 508-519,524-527
+  s_698b4574d4003e::t_6dabeda8a3fd52 803-805,808
+  s_698b4574d4003e::t_37d44c14cbfc3e 942-968
+  s_698b4574d4003e::t_28692a746fc96b 909-919
+  s_698b4574d4003e::t_b8e5f3ce3bdf4b 200
+server/internal/core/dialect_sqlite.go
+  s_698b4574d4003e::t_f3a4b288ca19ab 23-25,29-40
+server/internal/core/json_store_test.go
+  s_698b4574d4003e::t_fdd85c72c1f7c3 29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.33-trip",
+  "base_commit_sha": "7979dd9bf5f59ef845fc0e7b22c3bb9bc6e64a70",
+  "prompts": {},
+  "sessions": {
+    "s_698b4574d4003e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f771b9f8-42eb-4b4f-b120-9a8f8b7061b9",
+        "model": "deepseek-v4-pro"
+      },
+      "human_author": "cowhorse05 <yli257812@gmail.com>"
+    }
+  }
+}
