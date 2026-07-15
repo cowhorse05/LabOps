@@ -122,9 +122,22 @@ LabOps **不提供通用默认密码**。本地开发环境由 `compose.dev.yaml
 
 ## 在线演示
 
-生产实例运行在 **[https://cowhorse.xyz](https://cowhorse.xyz)**，已接入真实 Agent。
+演示实例运行在 **[http://47.80.31.24](http://47.80.31.24)**，已接入 Docker 模拟的 Agent 并实时心跳。
 
-> 演示站点需要密码访问。它展示了在真实 Ubuntu 服务器上使用 Docker Compose、MySQL、Let's Encrypt TLS 和 systemd 管理 Agent 的完整运维闭环。
+> 演示环境运行在阿里云 ECS（Alibaba Linux 8, x86_64），使用 Nginx 反向代理、SQLite 和 systemd 管理 agent 进程。无 TLS——这是一个展示环境。刷新仪表盘即可看到每 10 秒更新的实时指标。
+
+### 演示账号
+
+| 角色   | 用户名    | 密码               |
+|--------|-----------|--------------------|
+| 管理员 | `admin`   | `DemoAdmin12345`   |
+| 操作员 | `user01`  | `TestPass01345678` |
+| 观察者 | `user02`  | `TestPass02345678` |
+| 观察者 | `user03`  | `TestPass03345678` |
+| 观察者 | `user04`  | `TestPass04345678` |
+| 观察者 | `user05`  | `TestPass05345678` |
+
+> user03-05 为 `viewer` 角色。可通过登录页的自助注册表单注册更多账号。
 
 ---
 

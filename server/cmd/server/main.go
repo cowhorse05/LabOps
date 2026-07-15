@@ -90,10 +90,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	secureCookies := environment == "production"
+	if v := os.Getenv("LABOPS_SECURE_COOKIES"); v != "" {
+		secureCookies = v == "true"
+	}
+
 	app := core.NewApp(store, core.Config{
 		Environment:      environment,
 		PublicOrigin:     publicOrigin,
-		SecureCookies:    environment == "production",
+		SecureCookies:    secureCookies,
 		EncryptionKey:    os.Getenv("LABOPS_ENCRYPTION_KEY"),
 		OpenRegistration: os.Getenv("LABOPS_OPEN_REGISTRATION") == "true",
 		HeartbeatTimeout: envDuration("LABOPS_HEARTBEAT_TIMEOUT", 35*time.Second, logger),

@@ -12,7 +12,7 @@
 
 [**English**](#overview) | [**中文文档**](README_CN.md)
 
-**Live Demo:** [https://cowhorse.xyz](https://cowhorse.xyz) (password-protected)
+**Live Demo:** [http://47.80.31.24](http://47.80.31.24) (demo accounts available, see below)
 
 ---
 
@@ -144,9 +144,22 @@ If an admin password is forgotten, prefer restoring from backup or using the rec
 
 ## Live Demo
 
-A production instance is running at **[https://cowhorse.xyz](https://cowhorse.xyz)** with real agents connected.
+A demo instance is running at **[http://47.80.31.24](http://47.80.31.24)** with Docker-simulated agents connected and heartbeating in real time.
 
-> This is a password-protected demo. It demonstrates the full Agent-Server-Web loop on a live Ubuntu server with Docker Compose, MySQL, Let's Encrypt TLS, and systemd-managed agents.
+> The demo runs on an Alibaba Cloud ECS (Alibaba Linux 8, x86_64) with Nginx reverse proxy, SQLite, and systemd-managed agent processes. No TLS — this is a showcase environment. Refresh the dashboard to see live metrics update every 10 seconds.
+
+### Demo Accounts
+
+| Role     | Username  | Password           |
+|----------|-----------|--------------------|
+| Admin    | `admin`   | `DemoAdmin12345`   |
+| Operator | `user01`  | `TestPass01345678` |
+| Viewer   | `user02`  | `TestPass02345678` |
+| Viewer   | `user03`  | `TestPass03345678` |
+| Viewer   | `user04`  | `TestPass04345678` |
+| Viewer   | `user05`  | `TestPass05345678` |
+
+> user03-05 are `viewer` role. Register additional accounts via the self-service registration form on the login page.
 
 ---
 

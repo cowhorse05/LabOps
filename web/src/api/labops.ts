@@ -93,8 +93,8 @@ export const labopsApi = {
     return data;
   },
   async auditLogs() {
-    const { data } = await api.get<AuditLog[]>('/audit-logs');
-    return data;
+    const { data } = await api.get<{ logs: AuditLog[]; filter: Record<string, unknown> }>('/audit-logs');
+    return data.logs;
   },
   async users() { const { data } = await api.get<User[]>('/users'); return data; },
   async createUser(input: { username: string; displayName: string; password: string; role: string }) { const { data } = await api.post<User>('/users', input); return data; },
