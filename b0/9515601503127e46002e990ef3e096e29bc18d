@@ -1,0 +1,26 @@
+web/src/api/labops.ts
+  s_49a55cab281c99::t_ba9207ac2ba87f 96-97
+README.md
+  s_49a55cab281c99::t_71746c92e1ccfa 147,149-162
+  s_49a55cab281c99::t_b8a5a958d9d7f7 15
+server/cmd/server/main.go
+  s_49a55cab281c99::t_63b8f9f0906d76 93-97,101
+README_CN.md
+  s_49a55cab281c99::t_3a60a458d86aee 125,127-140
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.34-trip",
+  "base_commit_sha": "b09515601503127e46002e990ef3e096e29bc18d",
+  "prompts": {},
+  "sessions": {
+    "s_49a55cab281c99": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d24064-a8ab-4d23-b119-1f09c3534cf6",
+        "model": "deepseek-v4-pro"
+      },
+      "human_author": "cowhorse05 <yli257812@gmail.com>"
+    }
+  }
+}
