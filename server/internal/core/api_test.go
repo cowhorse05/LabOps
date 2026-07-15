@@ -522,12 +522,14 @@ func TestHandleAudit_Empty(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", w.Code)
 	}
-	var logs []AuditLog
-	if err := json.NewDecoder(w.Body).Decode(&logs); err != nil {
+	var wrapper struct {
+		Logs []AuditLog `json:"logs"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&wrapper); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if len(logs) != 0 {
-		t.Fatalf("expected 0 audit logs, got %d", len(logs))
+	if len(wrapper.Logs) != 0 {
+		t.Fatalf("expected 0 audit logs, got %d", len(wrapper.Logs))
 	}
 }
 
